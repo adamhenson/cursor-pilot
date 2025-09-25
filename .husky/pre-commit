@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Running lint-staged with Biome..."
+npx lint-staged

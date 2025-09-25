@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+coverage/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Framework/tool caches
+.turbo/
+.next/
+.vercel/
+.pnpm-store/
+
+# Workspace package outputs
+packages/**/dist/
+packages/**/build/

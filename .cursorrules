@@ -1,0 +1,58 @@
+# Cursor Rules
+
+## Commit Messages
+
+- Always use conventional commits format: `type(scope): description`
+- Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
+- Examples:
+  - `feat(auth): add JWT refresh token support`
+  - `fix(logs): resolve timestamp parsing issue`
+  - `docs(readme): update API documentation`
+  - `test(auth): add registration endpoint tests`
+  - `chore(deps): update dependencies`
+
+## Code Style
+
+- Use TypeScript strict mode
+- Prefer explicit return types for functions
+- Use async/await over promises
+- Use descriptive variable names
+- Prefer using function object params vs function arguments. See example at bottom.
+- List / define params in alphabetical order.
+- If the code has a test setup, be sure to write tests.
+
+Example:
+
+```typescript
+/**
+ * Function to do the following things for the following reason/s (if any)
+ */
+const myFunc = ({
+  hello,
+  world,
+}: {
+  /** This value represents some thing for some use */
+  hello?: string;
+
+  /** This value represents some thing for some use */
+  world: number;
+}) => {
+  // code
+};
+```
+
+## Write Documentation while You Write Code
+
+As you build out features and / or add complex logic or complex behavior, be sure to document important pieces in markdown files. If the root directory has a `./docs/ai-generated` subdirectory add files there as you work.
+
+## Thoughtful .gitignore
+
+You may need to add new apps, packages, and or workspaces. Be sure to thoughtfully consider adding a .gitignore and please do so.
+
+## Granular Commits
+
+As you work, for any cohesive changeset (the smaller the better), please run some form of git add, commit and push. Always use `git add .` vs specific files.
+
+## Type Checks
+
+Type check all workspaces before committing. Ideally this will be one command to run from the project root.
