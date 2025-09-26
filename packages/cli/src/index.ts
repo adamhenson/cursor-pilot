@@ -19,6 +19,7 @@ program
   .option('--temperature <num>', 'Sampling temperature', (v) => Number(v), 0)
   .option('--prompt <pathOrText>', 'Governing prompt path or literal text')
   .option('--plan <path>', 'Path to plan.yml')
+  .option('--log <dir>', 'Directory to write transcript logs')
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -30,6 +31,7 @@ program
       temperature?: number;
       prompt?: string;
       plan?: string;
+      log?: string;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -39,6 +41,7 @@ program
         temperature: opts.temperature,
         governingPrompt: opts.prompt,
         planPath: opts.plan,
+        logDir: opts.log,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }

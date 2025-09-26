@@ -7,6 +7,7 @@ import { CursorProcess } from '../cursor/CursorProcess.js';
 import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
+import { Transcript } from '../telemetry/Transcript.js';
 import type { OrchestratorEvent } from './Events.js';
 
 /** Options that configure the orchestrator runtime behavior. */
@@ -25,6 +26,8 @@ export type OrchestratorOptions = {
   governingPrompt?: string;
   /** Optional path to a plan.yml */
   planPath?: string;
+  /** Optional directory to write transcript logs to */
+  logDir?: string;
 };
 
 async function resolveGoverningPrompt(
@@ -50,6 +53,7 @@ export class Orchestrator {
   private readonly options: OrchestratorOptions;
   private process?: CursorProcess;
   private detectors: CursorDetectors | undefined;
+  private transcript: Transcript | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -93,6 +97,9 @@ export class Orchestrator {
 
     const provider = createProvider(this.options.provider ?? 'mock');
     this.detectors = new CursorDetectors();
+    this.transcript = this.options.logDir
+      ? new Transcript({ logDir: this.options.logDir })
+      : undefined;
 
     this.process = new CursorProcess({
       cursorBinary: this.options.cursorBinary ?? 'cursor',
@@ -105,11 +112,14 @@ export class Orchestrator {
     const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
 
     this.process.onData(async (chunk) => {
+      this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
+
       const eventType = this.detectors?.ingestChunk(chunk);
       if (!eventType) return;
       const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
       // eslint-disable-next-line no-console
       console.log('[CursorPilot] event:', event.type);
+      this.transcript?.write({ ts: Date.now(), type: event.type });
 
       if (event.type === 'question' || event.type === 'awaitingInput') {
         const { userPrompt } = await buildContext({
@@ -123,6 +133,7 @@ export class Orchestrator {
           maxTokens: 16,
           temperature: this.options.temperature ?? 0,
         });
+        this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
         // eslint-disable-next-line no-console
         console.log('[CursorPilot] answer:', text);
         await this.process?.write(text);
@@ -133,6 +144,7 @@ export class Orchestrator {
   /** Stop the run session and clean up the PTY process. */
   public async stop(): Promise<void> {
     await this.process?.dispose();
+    this.transcript?.close();
     this.process = undefined;
   }
 }
