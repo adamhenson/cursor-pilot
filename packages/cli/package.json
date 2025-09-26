@@ -1,0 +1,22 @@
+{
+  "name": "@cursor-pilot/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cursor-pilot": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cursor-pilot/core": "0.0.0",
+    "@cursor-pilot/types": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2"
+  }
+}
