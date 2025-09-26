@@ -14,10 +14,7 @@
     "typescript": "^5.6.3"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,json}": [
-      "biome format --write {files}",
-      "biome check --apply {files}"
-    ]
+    "*.{ts,tsx,js,jsx,json}": ["biome format --write {files}", "biome check --apply {files}"]
   },
   "engines": {
     "node": ">=22.17.1",
