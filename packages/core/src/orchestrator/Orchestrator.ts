@@ -1,10 +1,14 @@
 import { CursorProcess } from "../cursor/CursorProcess.js";
 import { CursorDetectors } from "../cursor/CursorDetectors.js";
 import type { OrchestratorEvent } from "./Events.js";
+import { createProvider, type ProviderName } from "../llm/ProviderFactory.js";
 
 export type OrchestratorOptions = {
   cursorBinary?: string;
   cwd?: string;
+  provider?: ProviderName;
+  model?: string;
+  temperature?: number;
 };
 
 export class Orchestrator {
@@ -31,10 +35,14 @@ export class Orchestrator {
         cursor: this.options.cursorBinary ?? "cursor",
         cwd: this.options.cwd ?? process.cwd(),
         args: argv,
+        provider: this.options.provider ?? "mock",
+        model: this.options.model,
+        temperature: this.options.temperature,
       });
       return;
     }
 
+    const provider = createProvider(this.options.provider ?? "mock");
     this.detectors = new CursorDetectors();
 
     this.process = new CursorProcess({
@@ -44,13 +52,24 @@ export class Orchestrator {
 
     await this.process.start(argv);
 
-    // Attach a lightweight output tap for classification
-    this.process.onData((chunk) => {
+    this.process.onData(async (chunk) => {
       const eventType = this.detectors?.ingestChunk(chunk);
       if (!eventType) return;
       const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
       // eslint-disable-next-line no-console
       console.log("[CursorPilot] event:", event.type);
+
+      if (event.type === "question" || event.type === "awaitingInput") {
+        const { text } = await provider.complete({
+          system: "You are a terminal replier.",
+          user: chunk,
+          maxTokens: 5,
+          temperature: this.options.temperature ?? 0,
+        });
+        // eslint-disable-next-line no-console
+        console.log("[CursorPilot] answer:", text);
+        await this.process?.write(text);
+      }
     });
   }
 
