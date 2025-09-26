@@ -36,3 +36,6 @@ packages/**/build/
 # TypeScript build info
 *.tsbuildinfo
 packages/**/tsconfig.tsbuildinfo
+
+# Runtime artifacts (transcripts, logs)
+runs/
