@@ -1,4 +1,4 @@
-# AI Cursor Driver — Design Doc
+# CursorPilot — Design Doc
 
 ## 1) One-liner & Goals
 
@@ -24,7 +24,7 @@
 
 ```mermaid
 flowchart LR
-    U[User] -->|governing prompt + command plan| CLI[ai-cursor-driver CLI]
+    U[User] -->|governing prompt + command plan| CLI[CursorPilot CLI]
     CLI --> Cfg[Config & Profiles]
     CLI --> Orchestrator
     Orchestrator --> PTY[node-pty wrapper]
@@ -54,11 +54,11 @@ flowchart LR
 ## 3) Workspace Layout
 
 ```
-ai-cursor-driver/
+cursor-pilot/
   package.json                # root, npm workspaces
   tsconfig.json
   /packages
-    /cli                      # bin: ai-cursor
+    /cli                      # bin: cursor-pilot
       package.json
       src/
         index.ts              # entry, arg parsing, boot Orchestrator
@@ -102,7 +102,7 @@ ai-cursor-driver/
       package.json
       src/index.d.ts
   /docs
-    AI-Cursor-Driver.md       # this doc
+    CursorPilot.md            # this doc
 ```
 
 ---
@@ -112,7 +112,7 @@ ai-cursor-driver/
 **Command**
 
 ```bash
-npx ai-cursor run \
+npx cursor-pilot run \
   --prompt "./prompts/governing.md" \
   --plan "./plan.yml" \
   --cursor "cursor" \
@@ -355,7 +355,7 @@ steps:
 
 ```ts
 import pty from "node-pty";
-import { Orchestrator } from "@ai-cursor/core/orchestrator/Orchestrator";
+import { Orchestrator } from "@cursor-pilot/core/orchestrator/Orchestrator";
 
 const shell = process.platform === "win32" ? "powershell.exe" : "bash";
 const ptyProc = pty.spawn(shell, [], {
@@ -428,11 +428,11 @@ while (!done) {
 
 ```json
 {
-  "name": "ai-cursor-driver",
+  "name": "cursor-pilot",
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
-    "build": "npm run -w @ai-cursor/core build && npm run -w @ai-cursor/cli build",
+    "build": "npm run -w @cursor-pilot/core build && npm run -w @cursor-pilot/cli build",
     "lint": "biome check .",
     "test": "vitest run"
   },
@@ -448,12 +448,12 @@ while (!done) {
 
 ```json
 {
-  "name": "@ai-cursor/cli",
+  "name": "@cursor-pilot/cli",
   "version": "0.1.0",
   "type": "module",
-  "bin": { "ai-cursor": "dist/index.js" },
+  "bin": { "cursor-pilot": "dist/index.js" },
   "dependencies": {
-    "@ai-cursor/core": "0.1.0",
+    "@cursor-pilot/core": "0.1.0",
     "commander": "^12.1.0",
     "node-pty": "^1.0.0"
   },
@@ -499,7 +499,7 @@ while (!done) {
 
 ## 19) Example Session (Narrative)
 
-1. User runs `ai-cursor run --prompt ./prompts/governing.md --plan ./plan.yml`.
+1. User runs `cursor-pilot run --prompt ./prompts/governing.md --plan ./plan.yml`.
 2. Orchestrator spawns PTY, launches Cursor’s scaffold command.
 3. Cursor prints: “Choose a template (1-React, 2-Next.js, 3-Express):”
 4. Detector fires `ASKING_QUESTION`. Context Builder composes prompt with recent stdout and plan step.

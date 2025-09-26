@@ -1,4 +1,4 @@
-# AI Cursor Driver — Phased Development Roadmap
+# CursorPilot — Phased Development Roadmap
 
 This roadmap translates `docs/design.md` into concrete phases with clear objectives, deliverables, acceptance criteria, and risks. We’ll work iteratively, landing small, verifiable milestones behind conventional commits and CI-friendly scripts.
 
@@ -26,12 +26,12 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 - Objectives
   - Create the monorepo structure matching the design.
 - Deliverables
-  - Packages: `@ai-cursor/types`, `@ai-cursor/core`, `@ai-cursor/cli`, `@ai-cursor/detectors`.
+  - Packages: `@cursor-pilot/types`, `@cursor-pilot/core`, `@cursor-pilot/cli`, `@cursor-pilot/detectors`.
   - Root `tsconfig.json`; per-package `tsconfig.json` and `package.json`.
   - Minimal exports and placeholder code; `typecheck`, `build`, `test` scripts per package.
 - Acceptance
   - `npm run typecheck` passes at root.
-  - `npm run -w @ai-cursor/cli build` produces `dist/`.
+  - `npm run -w @cursor-pilot/cli build` produces `dist/`.
 - Risks
   - TS project references complexity → mitigate with a single root tsconfig baseline.
 
@@ -41,14 +41,14 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 - Objectives
   - Lay down `Orchestrator`, PTY wrapper, lifecycle and state machine.
 - Deliverables
-  - `@ai-cursor/core`:
+  - `@cursor-pilot/core`:
     - `orchestrator/Orchestrator.ts`, `StateMachine.ts`, `Events.ts`.
     - `cursor/CursorProcess.ts` (PTY spawn via `node-pty`), graceful shutdown.
     - `telemetry/Logger.ts` (pino) with JSON logs.
-  - `@ai-cursor/cli`:
+  - `@cursor-pilot/cli`:
     - `src/index.ts` with a `run` command that launches orchestrator in dry-run mode.
 - Acceptance
-  - `ai-cursor run --dry-run` starts and exits cleanly.
+  - `cursor-pilot run --dry-run` starts and exits cleanly.
 - Risks
   - PTY flakiness across OS; keep macOS/Linux in CI matrix later.
 
@@ -58,8 +58,8 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 - Objectives
   - Classify Cursor output into Running, WaitingForInput, Question, Completed.
 - Deliverables
-  - `@ai-cursor/core/cursor/CursorDetectors.ts` (configurable regex-based detectors).
-  - `@ai-cursor/detectors/src/builtin.ts` with sensible defaults and profiles.
+  - `@cursor-pilot/core/cursor/CursorDetectors.ts` (configurable regex-based detectors).
+  - `@cursor-pilot/detectors/src/builtin.ts` with sensible defaults and profiles.
   - Idle debounce (e.g., 600–1200ms) and rolling window buffer.
 - Acceptance
   - Unit tests: known stdout snippets → expected classification.
@@ -72,7 +72,7 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 - Objectives
   - Pluggable provider interface with OpenAI implementation.
 - Deliverables
-  - `@ai-cursor/core/llm/Provider.ts` interface.
+  - `@cursor-pilot/core/llm/Provider.ts` interface.
   - `OpenAIProvider.ts` with retries/backoff and token budgeting stub.
   - `MockProvider.ts` for tests.
 - Acceptance
@@ -103,7 +103,7 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
   - `plan.yml` schema parser and executor (sequential steps → Cursor commands).
   - JSON overrides for detectors (`detectors.json`).
 - Acceptance
-  - `ai-cursor run --prompt ./x.md --plan ./plan.yml --dry-run` prints intended actions.
+  - `cursor-pilot run --prompt ./x.md --plan ./plan.yml --dry-run` prints intended actions.
 - Risks
   - CLI ergonomics; provide helpful error messages and examples.
 
