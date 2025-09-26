@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import { buildContext } from '../context/ContextBuilder.js';
 import { CursorDetectors } from '../cursor/CursorDetectors.js';
+import type { DetectorPatterns } from '../cursor/CursorDetectors.js';
 import { CursorProcess } from '../cursor/CursorProcess.js';
 import { runShellCommand } from '../executors/ShellExecutor.js';
 import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
@@ -43,6 +44,8 @@ export type OrchestratorOptions = {
   echoAnswers?: boolean;
   /** Maximum wall-clock time for a single cursor command (ms) */
   cursorCmdTimeoutMs?: number;
+  /** Optional path to detectors JSON overrides */
+  detectorsPath?: string;
 };
 
 async function resolveGoverningPrompt(
@@ -129,7 +132,32 @@ export class Orchestrator {
     }
 
     const provider = createProvider(this.options.provider ?? 'mock');
-    this.detectors = new CursorDetectors({ idleThresholdMs: this.options.idleMs ?? 5000 });
+    // Load optional detectors override
+    let patternsOverride: DetectorPatterns | undefined;
+    if (this.options.detectorsPath) {
+      try {
+        const path = this.options.detectorsPath.startsWith('/')
+          ? this.options.detectorsPath
+          : `${cwd}/${this.options.detectorsPath}`;
+        const raw = await readFile(path, 'utf8');
+        const json = JSON.parse(raw) as {
+          question?: string[];
+          awaitingInput?: string[];
+          completion?: string[];
+        };
+        patternsOverride = {
+          question: json.question?.map((s) => new RegExp(s, 'i')),
+          awaitingInput: json.awaitingInput?.map((s) => new RegExp(s, 'i')),
+          completion: json.completion?.map((s) => new RegExp(s, 'i')),
+        };
+      } catch {
+        // ignore invalid overrides
+      }
+    }
+    this.detectors = new CursorDetectors({
+      idleThresholdMs: this.options.idleMs ?? 5000,
+      patterns: patternsOverride,
+    });
     this.transcript = this.options.logDir
       ? new Transcript({ logDir: this.options.logDir })
       : undefined;

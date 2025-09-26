@@ -78,6 +78,7 @@ node packages/cli/dist/index.js run \
 - `--cursor <bin>`: Cursor binary name/path (default `cursor-agent`)
 - `--cwd <path>`: working directory
 - `--log <dir>`: directory to write transcript JSONL logs
+- `--detectors <path>`: path to detectors JSON overrides (env: `CURSORPILOT_DETECTORS`)
 - `--timeout-ms <num>`: maximum run time in milliseconds
 - `--max-steps <num>`: maximum number of answers to type
 - `--loop-breaker <num>`: stop if the same Q/A repeats N times

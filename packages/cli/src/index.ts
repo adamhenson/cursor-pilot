@@ -28,6 +28,7 @@ const envEchoAnswers = Boolean(
 const envCursorCmdTimeoutMs = process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS
   ? Number(process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS)
   : 20000;
+const envDetectorsPath = process.env.CURSORPILOT_DETECTORS;
 
 const program = new Command();
 program
@@ -51,6 +52,7 @@ program
   .option('--prompt <pathOrText>', 'Governing prompt path or literal text')
   .option('--plan <path>', 'Path to plan.yml')
   .option('--log <dir>', 'Directory to write transcript logs', process.env.CURSORPILOT_LOG_DIR)
+  .option('--detectors <path>', 'Path to detectors JSON overrides', envDetectorsPath)
   .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
   .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
   .option(
@@ -91,6 +93,7 @@ program
       autoAnswerIdle?: boolean;
       echoAnswers?: boolean;
       cursorCmdTimeoutMs?: number;
+      detectors?: string;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -108,6 +111,7 @@ program
         autoAnswerIdle: opts.autoAnswerIdle,
         echoAnswers: opts.echoAnswers,
         cursorCmdTimeoutMs: opts.cursorCmdTimeoutMs,
+        detectorsPath: opts.detectors,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }
