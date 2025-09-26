@@ -5,7 +5,8 @@
   "scripts": {
     "biome:check": "biome check .",
     "biome:format": "biome format --write .",
-    "typecheck": "npm run --workspaces --if-present typecheck"
+    "typecheck": "npm run --workspaces --if-present typecheck",
+    "test": "npm run --workspaces --if-present test"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -14,7 +15,10 @@
     "typescript": "^5.6.3"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,json}": ["biome format --write {files}", "biome check --apply {files}"]
+    "*.{ts,tsx,js,jsx,json}": [
+      "biome format --write {files}",
+      "biome check --apply {files}"
+    ]
   },
   "engines": {
     "node": ">=22.17.1",
