@@ -1,0 +1,11 @@
+name: "Bootstrap monorepo"
+steps:
+  - name: Init repo
+    run:
+      - echo "Ensure git initialized and deps installed"
+  - name: Cursor: scaffold service
+    cursor:
+      - create service --name api --template express-ts
+  - name: Cursor: add tests
+    cursor:
+      - generate tests --target packages/api
