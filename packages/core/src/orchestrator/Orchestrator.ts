@@ -100,7 +100,7 @@ export class Orchestrator {
     if (dryRun) {
       // eslint-disable-next-line no-console
       console.log('[CursorPilot] Dry run: would start Cursor with:', {
-        cursor: this.options.cursorBinary ?? 'cursor',
+        cursor: this.options.cursorBinary ?? 'cursor-agent',
         cwd,
         args: argv,
         provider: this.options.provider ?? 'mock',

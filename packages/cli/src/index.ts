@@ -32,7 +32,7 @@ program
   .description('Run a Cursor session')
   .option('--dry-run', 'Do not spawn PTY; print intended actions', false)
   .option('--cwd <path>', 'Working directory', process.cwd())
-  .option('--cursor <bin>', 'Cursor binary name/path', 'cursor')
+  .option('--cursor <bin>', 'Cursor binary name/path', 'cursor-agent')
   .option(
     '--provider <name>',
     'LLM provider (openai|mock)',
