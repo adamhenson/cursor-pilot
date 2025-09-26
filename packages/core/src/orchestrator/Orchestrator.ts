@@ -39,6 +39,8 @@ export type OrchestratorOptions = {
   idleMs?: number;
   /** Whether to auto-type safe idle answers */
   autoAnswerIdle?: boolean;
+  /** Whether to echo typed answers to stdout */
+  echoAnswers?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -219,6 +221,10 @@ export class Orchestrator {
         this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
         // eslint-disable-next-line no-console
         console.log('[CursorPilot] answer:', text);
+        if (this.options.echoAnswers) {
+          // eslint-disable-next-line no-console
+          console.log(`[CursorPilot] typed: ${text}`);
+        }
         await this.process?.write(text);
         this.answersTyped += 1;
       }

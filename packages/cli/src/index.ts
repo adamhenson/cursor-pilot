@@ -20,6 +20,11 @@ const envAutoAnswerIdle = Boolean(
     process.env.CURSORPILOT_AUTO_ANSWER_IDLE !== '0' &&
     process.env.CURSORPILOT_AUTO_ANSWER_IDLE.toLowerCase() !== 'false'
 );
+const envEchoAnswers = Boolean(
+  process.env.ECHO_ANSWERS &&
+    process.env.ECHO_ANSWERS !== '0' &&
+    process.env.ECHO_ANSWERS.toLowerCase() !== 'false'
+);
 
 const program = new Command();
 program
@@ -57,6 +62,7 @@ program
     'Automatically type safe answers on idle (y/n or numeric)',
     envAutoAnswerIdle
   )
+  .option('--echo-answers', 'Echo typed answers to stdout', envEchoAnswers)
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -74,6 +80,7 @@ program
       loopBreaker?: number;
       idleMs?: number;
       autoAnswerIdle?: boolean;
+      echoAnswers?: boolean;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -89,6 +96,7 @@ program
         loopBreaker: opts.loopBreaker,
         idleMs: opts.idleMs,
         autoAnswerIdle: opts.autoAnswerIdle,
+        echoAnswers: opts.echoAnswers,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }

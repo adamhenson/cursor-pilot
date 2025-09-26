@@ -75,7 +75,7 @@ node packages/cli/dist/index.js run \
 - `--provider <name>`: `mock` (default) or `openai`
 - `--model <id>`: model id for the provider
 - `--temperature <num>`: sampling temperature (default 0)
-- `--cursor <bin>`: Cursor binary name/path (default `cursor`)
+- `--cursor <bin>`: Cursor binary name/path (default `cursor-agent`)
 - `--cwd <path>`: working directory
 - `--log <dir>`: directory to write transcript JSONL logs
 - `--timeout-ms <num>`: maximum run time in milliseconds
@@ -83,6 +83,7 @@ node packages/cli/dist/index.js run \
 - `--loop-breaker <num>`: stop if the same Q/A repeats N times
 - `--idle-ms <num>`: idle threshold (ms) for inference when no prompt is detected (default 5000)
 - `--auto-answer-idle` (flag): automatically type safe answers (y/n or numeric) on idle
+- `--echo-answers` (flag): echo typed answers to stdout
 - `--dry-run`: do not spawn PTY; print intended actions
 
 ## Sample plan.yml

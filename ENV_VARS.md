@@ -10,6 +10,7 @@ These variables can be set in your shell or loaded via a local `.env` file.
 - `CURSORPILOT_LOOP_BREAKER` (optional): Stop if the same Q/A repeats this many times.
 - `CURSORPILOT_IDLE_MS` (default: `5000`): Idle threshold (ms) to infer what to type when no prompt is detected.
 - `CURSORPILOT_AUTO_ANSWER_IDLE` (optional): If truthy, auto-type safe answers (y/n or numeric) on idle.
+- `ECHO_ANSWERS` (optional): If truthy, echo typed answers to stdout.
 - `OPENAI_API_KEY` (required if provider is `openai`): API key for OpenAI.
 
 Example `.env`:
@@ -22,5 +23,6 @@ CURSORPILOT_MAX_STEPS=200
 CURSORPILOT_LOOP_BREAKER=3
 CURSORPILOT_IDLE_MS=5000
 CURSORPILOT_AUTO_ANSWER_IDLE=true
+ECHO_ANSWERS=true
 OPENAI_API_KEY=
 ```
