@@ -122,6 +122,17 @@ export class Orchestrator {
       ? new Transcript({ logDir: this.options.logDir })
       : undefined;
 
+    // Preflight: ensure cursor binary exists on PATH
+    const cursorBinary = this.options.cursorBinary ?? 'cursor';
+    const which = await runShellCommand({ cmd: `command -v ${cursorBinary}`, cwd });
+    if (which.exitCode !== 0) {
+      const msg = `Cursor binary not found on PATH: ${cursorBinary}. Install it or pass --cursor.`;
+      // eslint-disable-next-line no-console
+      console.error(`[CursorPilot] ${msg}`);
+      this.transcript?.write({ ts: Date.now(), type: 'cursor-not-found', chunk: msg });
+      return;
+    }
+
     if (this.options.timeoutMs && this.options.timeoutMs > 0) {
       this.stopTimer = setTimeout(async () => {
         this.transcript?.write({ ts: Date.now(), type: 'timeout' });
@@ -130,7 +141,7 @@ export class Orchestrator {
     }
 
     this.process = new CursorProcess({
-      cursorBinary: this.options.cursorBinary ?? 'cursor',
+      cursorBinary,
       cwd,
     });
 
