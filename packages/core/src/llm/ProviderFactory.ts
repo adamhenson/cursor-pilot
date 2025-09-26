@@ -1,14 +1,16 @@
-import type { LLMProvider } from "@cursor-pilot/types";
-import { OpenAIProvider } from "./OpenAIProvider.js";
-import { MockProvider } from "./MockProvider.js";
+import type { LLMProvider } from '@cursor-pilot/types';
+import { MockProvider } from './MockProvider.js';
+import { OpenAIProvider } from './OpenAIProvider.js';
 
-export type ProviderName = "openai" | "mock";
+/** Supported provider names. */
+export type ProviderName = 'openai' | 'mock';
 
+/** Create an LLM provider instance from a provider name. */
 export function createProvider(name: ProviderName): LLMProvider {
   switch (name) {
-    case "openai":
+    case 'openai':
       return new OpenAIProvider();
-    case "mock":
+    case 'mock':
       return new MockProvider();
     default:
       return new MockProvider();

@@ -1,21 +1,29 @@
-import { CursorProcess } from "../cursor/CursorProcess.js";
-import { CursorDetectors } from "../cursor/CursorDetectors.js";
-import type { OrchestratorEvent } from "./Events.js";
-import { createProvider, type ProviderName } from "../llm/ProviderFactory.js";
-import { baseSystemPrompt } from "../prompts/systemPrompt.js";
-import { buildContext } from "../context/ContextBuilder.js";
-import { readFile } from "node:fs/promises";
-import { access } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
-import { loadPlan } from "../plan/PlanLoader.js";
+import { constants as fsConstants } from 'node:fs';
+import { access } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { buildContext } from '../context/ContextBuilder.js';
+import { CursorDetectors } from '../cursor/CursorDetectors.js';
+import { CursorProcess } from '../cursor/CursorProcess.js';
+import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
+import { loadPlan } from '../plan/PlanLoader.js';
+import { baseSystemPrompt } from '../prompts/systemPrompt.js';
+import type { OrchestratorEvent } from './Events.js';
 
+/** Options that configure the orchestrator runtime behavior. */
 export type OrchestratorOptions = {
+  /** Binary name/path for Cursor */
   cursorBinary?: string;
+  /** Working directory to run commands */
   cwd?: string;
+  /** LLM provider to use */
   provider?: ProviderName;
+  /** Model identifier for the provider */
   model?: string;
+  /** Sampling temperature */
   temperature?: number;
-  governingPrompt?: string; // file path or literal
+  /** Governing prompt (file path or literal text) */
+  governingPrompt?: string;
+  /** Optional path to a plan.yml */
   planPath?: string;
 };
 
@@ -25,24 +33,30 @@ async function resolveGoverningPrompt(
 ): Promise<string | undefined> {
   if (!value) return undefined;
   try {
-    const fullPath = value.startsWith("/") ? value : `${cwd}/${value}`;
+    const fullPath = value.startsWith('/') ? value : `${cwd}/${value}`;
     await access(fullPath, fsConstants.F_OK);
-    const content = await readFile(fullPath, "utf8");
+    const content = await readFile(fullPath, 'utf8');
     return content;
   } catch {
     return value;
   }
 }
 
+/**
+ * High-level coordinator that spawns Cursor under a PTY, classifies output,
+ * builds prompts, calls the provider, and types answers back.
+ */
 export class Orchestrator {
   private readonly options: OrchestratorOptions;
   private process?: CursorProcess;
   private detectors: CursorDetectors | undefined;
 
+  /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
     this.options = options;
   }
 
+  /** Start a run session, optionally in dry-run mode. */
   public async start({
     args,
     dryRun,
@@ -53,7 +67,11 @@ export class Orchestrator {
     const cwd = this.options.cwd ?? process.cwd();
 
     const plan = this.options.planPath
-      ? await loadPlan(this.options.planPath.startsWith("/") ? this.options.planPath : `${cwd}/${this.options.planPath}`)
+      ? await loadPlan(
+          this.options.planPath.startsWith('/')
+            ? this.options.planPath
+            : `${cwd}/${this.options.planPath}`
+        )
       : undefined;
 
     const planCursorArgs = plan?.steps?.[0]?.cursor ?? [];
@@ -61,11 +79,11 @@ export class Orchestrator {
 
     if (dryRun) {
       // eslint-disable-next-line no-console
-      console.log("[CursorPilot] Dry run: would start Cursor with:", {
-        cursor: this.options.cursorBinary ?? "cursor",
+      console.log('[CursorPilot] Dry run: would start Cursor with:', {
+        cursor: this.options.cursorBinary ?? 'cursor',
         cwd,
         args: argv,
-        provider: this.options.provider ?? "mock",
+        provider: this.options.provider ?? 'mock',
         model: this.options.model,
         temperature: this.options.temperature,
         plan: plan ? { name: plan.name, steps: plan.steps.map((s) => s.name) } : undefined,
@@ -73,11 +91,11 @@ export class Orchestrator {
       return;
     }
 
-    const provider = createProvider(this.options.provider ?? "mock");
+    const provider = createProvider(this.options.provider ?? 'mock');
     this.detectors = new CursorDetectors();
 
     this.process = new CursorProcess({
-      cursorBinary: this.options.cursorBinary ?? "cursor",
+      cursorBinary: this.options.cursorBinary ?? 'cursor',
       cwd,
     });
 
@@ -91,9 +109,9 @@ export class Orchestrator {
       if (!eventType) return;
       const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
       // eslint-disable-next-line no-console
-      console.log("[CursorPilot] event:", event.type);
+      console.log('[CursorPilot] event:', event.type);
 
-      if (event.type === "question" || event.type === "awaitingInput") {
+      if (event.type === 'question' || event.type === 'awaitingInput') {
         const { userPrompt } = await buildContext({
           governingPrompt: governing,
           recentOutput: chunk,
@@ -106,12 +124,13 @@ export class Orchestrator {
           temperature: this.options.temperature ?? 0,
         });
         // eslint-disable-next-line no-console
-        console.log("[CursorPilot] answer:", text);
+        console.log('[CursorPilot] answer:', text);
         await this.process?.write(text);
       }
     });
   }
 
+  /** Stop the run session and clean up the PTY process. */
   public async stop(): Promise<void> {
     await this.process?.dispose();
     this.process = undefined;

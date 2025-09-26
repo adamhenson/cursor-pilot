@@ -5,6 +5,7 @@
   "scripts": {
     "biome:check": "biome check .",
     "biome:format": "biome format --write .",
+    "prepare": "husky",
     "typecheck": "npm run --workspaces --if-present typecheck",
     "test": "npm run --workspaces --if-present test"
   },

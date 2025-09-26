@@ -21,9 +21,22 @@
 - List / define params in alphabetical order.
 - If the code has a test setup, be sure to write tests.
 
+IMPORTANT:
+- Use JSDoc comment syntax to describe functions, const declarations, types and interfaces. See example below.
+
 Example:
 
 ```typescript
+/**
+ * A type for xyz and used for xyz
+ */
+type MyType = string;
+
+/**
+ * Text to describe my constant. This is used for xyz.
+ */
+const MyConstant = 'this is my constant';
+
 /**
  * Function to do the following things for the following reason/s (if any)
  */
