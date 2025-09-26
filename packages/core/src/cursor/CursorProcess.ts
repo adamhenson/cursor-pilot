@@ -8,6 +8,7 @@ export type CursorProcessOptions = {
 export class CursorProcess {
   private readonly options: CursorProcessOptions;
   private ptyProc: pty.IPty | undefined;
+  private dataSubscribers: Array<(chunk: string) => void> = [];
 
   public constructor(options: CursorProcessOptions) {
     this.options = options;
@@ -27,9 +28,13 @@ export class CursorProcess {
     this.ptyProc.write(`${command}\r`);
 
     this.ptyProc.onData((data) => {
-      // Forward raw output for now; later we will classify
       process.stdout.write(data);
+      for (const subscriber of this.dataSubscribers) subscriber(data);
     });
+  }
+
+  public onData(handler: (chunk: string) => void): void {
+    this.dataSubscribers.push(handler);
   }
 
   public async write(line: string): Promise<void> {
@@ -43,6 +48,7 @@ export class CursorProcess {
       this.ptyProc.kill();
     } finally {
       this.ptyProc = undefined;
+      this.dataSubscribers = [];
     }
   }
 }

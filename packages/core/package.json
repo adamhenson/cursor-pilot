@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@cursor-pilot/types": "0.0.0",
-    "node-pty": "^1.0.0"
+    "@cursor-pilot/detectors": "0.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.2"
