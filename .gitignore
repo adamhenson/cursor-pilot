@@ -32,3 +32,7 @@ yarn-error.log*
 # Workspace package outputs
 packages/**/dist/
 packages/**/build/
+
+# TypeScript build info
+*.tsbuildinfo
+packages/**/tsconfig.tsbuildinfo
