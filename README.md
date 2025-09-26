@@ -49,6 +49,9 @@ Acceptance Criteria:
 When unsure: Ask ONE short clarifying question first; otherwise proceed.
 ```
 
+## Environment Variables
+See `ENV_VARS.md` for supported variables and an example `.env`.
+
 ## Quickstart (Dry Run)
 ```bash
 # Show what would run, without spawning Cursor

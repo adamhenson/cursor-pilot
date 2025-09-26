@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { Orchestrator } from '@cursor-pilot/core';
 import { Command } from 'commander';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const program = new Command();
 program
@@ -14,12 +17,16 @@ program
   .option('--dry-run', 'Do not spawn PTY; print intended actions', false)
   .option('--cwd <path>', 'Working directory', process.cwd())
   .option('--cursor <bin>', 'Cursor binary name/path', 'cursor')
-  .option('--provider <name>', 'LLM provider (openai|mock)', 'mock')
-  .option('--model <id>', 'Model id for provider')
+  .option(
+    '--provider <name>',
+    'LLM provider (openai|mock)',
+    process.env.CURSORPILOT_PROVIDER ?? 'mock'
+  )
+  .option('--model <id>', 'Model id for provider', process.env.CURSORPILOT_MODEL)
   .option('--temperature <num>', 'Sampling temperature', (v) => Number(v), 0)
   .option('--prompt <pathOrText>', 'Governing prompt path or literal text')
   .option('--plan <path>', 'Path to plan.yml')
-  .option('--log <dir>', 'Directory to write transcript logs')
+  .option('--log <dir>', 'Directory to write transcript logs', process.env.CURSORPILOT_LOG_DIR)
   .allowExcessArguments(false)
   .action(
     async (opts: {
