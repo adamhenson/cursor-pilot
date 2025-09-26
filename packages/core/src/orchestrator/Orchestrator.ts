@@ -107,7 +107,7 @@ export class Orchestrator {
     // Determine if any interactive cursor steps exist
     const hasInteractiveCursor = Boolean(
       plan?.steps?.some((s) =>
-        s.cursor?.some((c) => (c.split(' ').filter(Boolean)[0] ?? '') === 'agent')
+        s.cursor?.some((c) => c.split(' ').filter(Boolean).includes('agent'))
       )
     );
 
@@ -289,7 +289,7 @@ export class Orchestrator {
         if (step.cursor?.length) {
           for (const cargs of step.cursor) {
             const parts = cargs.split(' ').filter(Boolean);
-            const isInteractive = parts[0] === 'agent';
+            const isInteractive = parts.includes('agent');
             if (!isInteractive) {
               const cursorCmd = `${cursorBinary} ${cargs}`;
               const { exitCode, stdout, stderr } = await runShellCommand({ cmd: cursorCmd, cwd });

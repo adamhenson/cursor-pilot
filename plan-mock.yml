@@ -1,0 +1,5 @@
+name: "Mock agent demo"
+steps:
+  - name: "Mock: interactive agent"
+    cursor:
+      - agent --print "Hello from Mock"
