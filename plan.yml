@@ -1,8 +1,8 @@
-name: "Bootstrap monorepo"
+name: "Agent demo"
 steps:
-  - name: "Init repo"
-    run:
-      - echo "Ensure git initialized and deps installed"
   - name: "Cursor: show help"
     cursor:
       - --help
+  - name: "Cursor: interactive agent"
+    cursor:
+      - agent --print "Hello from CursorPilot"
