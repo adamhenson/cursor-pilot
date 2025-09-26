@@ -78,6 +78,11 @@ node packages/cli/dist/index.js run \
 - `--cursor <bin>`: Cursor binary name/path (default `cursor`)
 - `--cwd <path>`: working directory
 - `--log <dir>`: directory to write transcript JSONL logs
+- `--timeout-ms <num>`: maximum run time in milliseconds
+- `--max-steps <num>`: maximum number of answers to type
+- `--loop-breaker <num>`: stop if the same Q/A repeats N times
+- `--idle-ms <num>`: idle threshold (ms) for inference when no prompt is detected (default 5000)
+- `--auto-answer-idle` (flag): automatically type safe answers (y/n or numeric) on idle
 - `--dry-run`: do not spawn PTY; print intended actions
 
 ## Sample plan.yml
