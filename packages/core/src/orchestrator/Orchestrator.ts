@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { buildContext } from '../context/ContextBuilder.js';
 import { CursorDetectors } from '../cursor/CursorDetectors.js';
 import { CursorProcess } from '../cursor/CursorProcess.js';
+import { runShellCommand } from '../executors/ShellExecutor.js';
 import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
@@ -34,6 +35,10 @@ export type OrchestratorOptions = {
   maxSteps?: number;
   /** Loop breaker: stop if same Q/A repeats this many times */
   loopBreaker?: number;
+  /** Idle inference threshold */
+  idleMs?: number;
+  /** Whether to auto-type safe idle answers */
+  autoAnswerIdle?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -64,6 +69,7 @@ export class Orchestrator {
   private lastQAHash: string | undefined;
   private repeatedCount = 0;
   private stopTimer: NodeJS.Timeout | undefined;
+  private consecutiveIdle = 0;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -104,12 +110,14 @@ export class Orchestrator {
         timeoutMs: this.options.timeoutMs,
         maxSteps: this.options.maxSteps,
         loopBreaker: this.options.loopBreaker,
+        idleMs: this.options.idleMs,
+        autoAnswerIdle: this.options.autoAnswerIdle,
       });
       return;
     }
 
     const provider = createProvider(this.options.provider ?? 'mock');
-    this.detectors = new CursorDetectors();
+    this.detectors = new CursorDetectors({ idleThresholdMs: this.options.idleMs ?? 5000 });
     this.transcript = this.options.logDir
       ? new Transcript({ logDir: this.options.logDir })
       : undefined;
@@ -126,7 +134,7 @@ export class Orchestrator {
       cwd,
     });
 
-    await this.process.start(argv);
+    await this.process.start([]);
 
     const system = baseSystemPrompt();
     const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
@@ -140,6 +148,30 @@ export class Orchestrator {
       // eslint-disable-next-line no-console
       console.log('[CursorPilot] event:', event.type);
       this.transcript?.write({ ts: Date.now(), type: event.type });
+
+      if (event.type === 'idle') {
+        this.consecutiveIdle += 1;
+        if (this.consecutiveIdle >= 2) {
+          const { userPrompt } = await buildContext({
+            governingPrompt: governing,
+            recentOutput: chunk,
+            cwd,
+          });
+          const { text } = await provider.complete({
+            system,
+            user: userPrompt,
+            maxTokens: 16,
+            temperature: this.options.temperature ?? 0,
+          });
+          this.transcript?.write({ ts: Date.now(), type: 'idle-suggestion', answer: text });
+          // Only auto-answer trivial cases when explicitly enabled
+          if (this.options.autoAnswerIdle && (/^(y|n)$/i.test(text) || /^\d+$/.test(text))) {
+            await this.process?.write(text);
+          }
+        }
+        return;
+      }
+      this.consecutiveIdle = 0;
 
       if (event.type === 'question' || event.type === 'awaitingInput') {
         if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
@@ -180,6 +212,35 @@ export class Orchestrator {
         this.answersTyped += 1;
       }
     });
+
+    // Execute plan steps sequentially (basic version)
+    if (plan?.steps?.length) {
+      for (const step of plan.steps) {
+        if (step.run?.length) {
+          for (const cmd of step.run) {
+            const { exitCode, stdout, stderr } = await runShellCommand({ cmd, cwd });
+            this.transcript?.write({
+              ts: Date.now(),
+              type: 'run',
+              chunk: `$ ${cmd}\n${stdout}${stderr}`,
+            });
+            if (exitCode !== 0) {
+              this.transcript?.write({ ts: Date.now(), type: 'run-error', chunk: cmd });
+              await this.stop();
+              return;
+            }
+          }
+        }
+        if (step.cursor?.length) {
+          for (const cargs of step.cursor) {
+            const parts = cargs.split(' ').filter(Boolean);
+            await this.process.execCursor(parts);
+            // Best-effort wait loop: expect either 'completed' or a prompt sequence will follow
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        }
+      }
+    }
   }
 
   /** Stop the run session and clean up the PTY process. */

@@ -19,8 +19,8 @@ export class CursorProcess {
     this.options = options;
   }
 
-  /** Start the PTY and run the Cursor command with provided arguments. */
-  public async start(args: string[]): Promise<void> {
+  /** Start the PTY shell; does not automatically run a cursor command. */
+  public async start(_: string[]): Promise<void> {
     const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
     this.ptyProc = pty.spawn(shell, [], {
       name: 'xterm-color',
@@ -30,13 +30,17 @@ export class CursorProcess {
       env: process.env,
     });
 
-    const command = `${this.options.cursorBinary} ${args.join(' ')}`.trim();
-    this.ptyProc.write(`${command}\r`);
-
     this.ptyProc.onData((data) => {
       process.stdout.write(data);
       for (const subscriber of this.dataSubscribers) subscriber(data);
     });
+  }
+
+  /** Execute a cursor command line within the PTY. */
+  public async execCursor(args: string[]): Promise<void> {
+    if (!this.ptyProc) return;
+    const command = `${this.options.cursorBinary} ${args.join(' ')}`.trim();
+    this.ptyProc.write(`${command}\r`);
   }
 
   /** Subscribe to raw PTY output data chunks. */
