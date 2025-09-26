@@ -84,6 +84,7 @@ node packages/cli/dist/index.js run \
 - `--idle-ms <num>`: idle threshold (ms) for inference when no prompt is detected (default 5000)
 - `--auto-answer-idle` (flag): automatically type safe answers (y/n or numeric) on idle
 - `--echo-answers` (flag): echo typed answers to stdout
+- `--cursor-cmd-timeout-ms <num>`: timeout for each `cursor-agent` command (ms)
 - `--dry-run`: do not spawn PTY; print intended actions
 
 ## Sample plan.yml
@@ -100,6 +101,33 @@ steps:
     cursor:
       - generate tests --target packages/api
 ```
+
+## Interactive Agent Demo
+Use an interactive `cursor-agent agent` step to exercise the PTY + answering loop:
+
+```yaml
+name: "Agent demo"
+steps:
+  - name: "Cursor: show help"
+    cursor:
+      - --help
+  - name: "Cursor: interactive agent"
+    cursor:
+      - agent --print "Hello from CursorPilot"
+```
+
+Run it (adjust the `--cursor` path for your system):
+```bash
+node packages/cli/dist/index.js run \
+  --cursor "/Users/adam/.local/bin/cursor-agent" \
+  --provider mock \
+  --plan ./plan.yml \
+  --echo-answers \
+  --log ./runs/agent-01
+```
+
+- Non-interactive cursor commands run directly and exit cleanly.
+- Interactive `agent` uses the PTY; output is mirrored, prompts are detected, and answers are typed. Use `--cursor-cmd-timeout-ms` to bound each command.
 
 ## Notes
 - Providers: `mock` is bundled for tests; `openai` stub requires `OPENAI_API_KEY`.
