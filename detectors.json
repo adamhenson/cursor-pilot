@@ -1,0 +1,5 @@
+{
+  "question": ["\\?\\s*$", "^Confirm (yes\\/no):", "^(Proceed|Continue)\\? \\[y\\/n\\]"],
+  "awaitingInput": ["^Enter .*:", "^Provide .*:"],
+  "completion": ["^All tasks (completed|done)\\.?$", "^✅ (Build|Refactor|Scaffold) complete"]
+}
