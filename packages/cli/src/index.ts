@@ -17,6 +17,7 @@ program
   .option("--provider <name>", "LLM provider (openai|mock)", "mock")
   .option("--model <id>", "Model id for provider")
   .option("--temperature <num>", "Sampling temperature", (v) => Number(v), 0)
+  .option("--prompt <pathOrText>", "Governing prompt path or literal text")
   .allowExcessArguments(false)
   .action(async (opts: {
     dryRun?: boolean;
@@ -25,6 +26,7 @@ program
     provider?: "openai" | "mock";
     model?: string;
     temperature?: number;
+    prompt?: string;
   }) => {
     const orchestrator = new Orchestrator({
       cwd: opts.cwd,
@@ -32,7 +34,8 @@ program
       provider: opts.provider,
       model: opts.model,
       temperature: opts.temperature,
-    });
+      governingPrompt: opts.prompt,
+    } as any);
     await orchestrator.start({ args: [], dryRun: opts.dryRun });
   });
 

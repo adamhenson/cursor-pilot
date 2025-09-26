@@ -2,6 +2,11 @@ import { CursorProcess } from "../cursor/CursorProcess.js";
 import { CursorDetectors } from "../cursor/CursorDetectors.js";
 import type { OrchestratorEvent } from "./Events.js";
 import { createProvider, type ProviderName } from "../llm/ProviderFactory.js";
+import { baseSystemPrompt } from "../prompts/systemPrompt.js";
+import { buildContext } from "../context/ContextBuilder.js";
+import { readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 
 export type OrchestratorOptions = {
   cursorBinary?: string;
@@ -9,7 +14,24 @@ export type OrchestratorOptions = {
   provider?: ProviderName;
   model?: string;
   temperature?: number;
+  governingPrompt?: string; // file path or literal
 };
+
+async function resolveGoverningPrompt(
+  value: string | undefined,
+  cwd: string
+): Promise<string | undefined> {
+  if (!value) return undefined;
+  // Try treat as path relative to cwd
+  try {
+    const fullPath = value.startsWith("/") ? value : `${cwd}/${value}`;
+    await access(fullPath, fsConstants.F_OK);
+    const content = await readFile(fullPath, "utf8");
+    return content;
+  } catch {
+    return value; // literal
+  }
+}
 
 export class Orchestrator {
   private readonly options: OrchestratorOptions;
@@ -28,12 +50,13 @@ export class Orchestrator {
     dryRun?: boolean;
   }): Promise<void> {
     const argv = args ?? [];
+    const cwd = this.options.cwd ?? process.cwd();
 
     if (dryRun) {
       // eslint-disable-next-line no-console
       console.log("[CursorPilot] Dry run: would start Cursor with:", {
         cursor: this.options.cursorBinary ?? "cursor",
-        cwd: this.options.cwd ?? process.cwd(),
+        cwd,
         args: argv,
         provider: this.options.provider ?? "mock",
         model: this.options.model,
@@ -47,10 +70,13 @@ export class Orchestrator {
 
     this.process = new CursorProcess({
       cursorBinary: this.options.cursorBinary ?? "cursor",
-      cwd: this.options.cwd ?? process.cwd(),
+      cwd,
     });
 
     await this.process.start(argv);
+
+    const system = baseSystemPrompt();
+    const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
 
     this.process.onData(async (chunk) => {
       const eventType = this.detectors?.ingestChunk(chunk);
@@ -60,10 +86,15 @@ export class Orchestrator {
       console.log("[CursorPilot] event:", event.type);
 
       if (event.type === "question" || event.type === "awaitingInput") {
+        const { userPrompt } = await buildContext({
+          governingPrompt: governing,
+          recentOutput: chunk,
+          cwd,
+        });
         const { text } = await provider.complete({
-          system: "You are a terminal replier.",
-          user: chunk,
-          maxTokens: 5,
+          system,
+          user: userPrompt,
+          maxTokens: 16,
           temperature: this.options.temperature ?? 0,
         });
         // eslint-disable-next-line no-console
