@@ -29,6 +29,26 @@ npm run biome:check
 - `@cursor-pilot/cli`
 - `@cursor-pilot/detectors`
 
+## Governing Prompt vs Plan
+- Governing prompt (Markdown): the policy. It defines tone, constraints, safety rules, and priorities for every answer. Injected into every LLM call.
+- Plan (YAML): the procedure. It defines an ordered set of steps with optional `run` (shell) and `cursor` (Cursor CLI args). Used to orchestrate what to execute.
+- You can use one without the other. For “push until done” flows, keep the plan minimal (or omit it) and put acceptance criteria into the governing prompt.
+
+### Example governing prompt (Markdown)
+```markdown
+Role: Senior TypeScript engineer.
+Objective: Build a monorepo with CLI + core packages. Use strict TS, Vitest, Biome.
+Style: Concise commits, small PR-sized increments.
+Constraints:
+- Never delete files without explicit confirmation.
+- Prefer non-destructive actions; add tests for new logic.
+Acceptance Criteria:
+- `npm run typecheck` passes.
+- `npm test` passes with at least one meaningful unit test per package.
+- All files formatted and linted by Biome (no errors).
+When unsure: Ask ONE short clarifying question first; otherwise proceed.
+```
+
 ## Quickstart (Dry Run)
 ```bash
 # Show what would run, without spawning Cursor
@@ -61,13 +81,13 @@ node packages/cli/dist/index.js run \
 ```yaml
 name: "Bootstrap monorepo"
 steps:
-  - name: Init repo
+  - name: "Init repo"
     run:
       - echo "Ensure git initialized and deps installed"
-  - name: Cursor: scaffold service
+  - name: "Cursor: scaffold service"
     cursor:
       - create service --name api --template express-ts
-  - name: Cursor: add tests
+  - name: "Cursor: add tests"
     cursor:
       - generate tests --target packages/api
 ```
