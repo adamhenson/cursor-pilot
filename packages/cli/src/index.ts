@@ -18,6 +18,7 @@ program
   .option("--model <id>", "Model id for provider")
   .option("--temperature <num>", "Sampling temperature", (v) => Number(v), 0)
   .option("--prompt <pathOrText>", "Governing prompt path or literal text")
+  .option("--plan <path>", "Path to plan.yml")
   .allowExcessArguments(false)
   .action(async (opts: {
     dryRun?: boolean;
@@ -27,6 +28,7 @@ program
     model?: string;
     temperature?: number;
     prompt?: string;
+    plan?: string;
   }) => {
     const orchestrator = new Orchestrator({
       cwd: opts.cwd,
@@ -35,6 +37,7 @@ program
       model: opts.model,
       temperature: opts.temperature,
       governingPrompt: opts.prompt,
+      planPath: opts.plan,
     } as any);
     await orchestrator.start({ args: [], dryRun: opts.dryRun });
   });

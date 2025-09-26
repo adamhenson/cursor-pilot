@@ -7,6 +7,7 @@ import { buildContext } from "../context/ContextBuilder.js";
 import { readFile } from "node:fs/promises";
 import { access } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
+import { loadPlan } from "../plan/PlanLoader.js";
 
 export type OrchestratorOptions = {
   cursorBinary?: string;
@@ -15,6 +16,7 @@ export type OrchestratorOptions = {
   model?: string;
   temperature?: number;
   governingPrompt?: string; // file path or literal
+  planPath?: string;
 };
 
 async function resolveGoverningPrompt(
@@ -22,14 +24,13 @@ async function resolveGoverningPrompt(
   cwd: string
 ): Promise<string | undefined> {
   if (!value) return undefined;
-  // Try treat as path relative to cwd
   try {
     const fullPath = value.startsWith("/") ? value : `${cwd}/${value}`;
     await access(fullPath, fsConstants.F_OK);
     const content = await readFile(fullPath, "utf8");
     return content;
   } catch {
-    return value; // literal
+    return value;
   }
 }
 
@@ -49,8 +50,14 @@ export class Orchestrator {
     args?: string[];
     dryRun?: boolean;
   }): Promise<void> {
-    const argv = args ?? [];
     const cwd = this.options.cwd ?? process.cwd();
+
+    const plan = this.options.planPath
+      ? await loadPlan(this.options.planPath.startsWith("/") ? this.options.planPath : `${cwd}/${this.options.planPath}`)
+      : undefined;
+
+    const planCursorArgs = plan?.steps?.[0]?.cursor ?? [];
+    const argv = (args && args.length > 0 ? args : planCursorArgs) ?? [];
 
     if (dryRun) {
       // eslint-disable-next-line no-console
@@ -61,6 +68,7 @@ export class Orchestrator {
         provider: this.options.provider ?? "mock",
         model: this.options.model,
         temperature: this.options.temperature,
+        plan: plan ? { name: plan.name, steps: plan.steps.map((s) => s.name) } : undefined,
       });
       return;
     }

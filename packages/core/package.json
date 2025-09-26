@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@cursor-pilot/detectors": "0.0.0",
-    "@cursor-pilot/types": "0.0.0"
+    "@cursor-pilot/types": "0.0.0",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
