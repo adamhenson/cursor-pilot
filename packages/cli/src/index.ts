@@ -14,6 +14,12 @@ const envMaxSteps = process.env.CURSORPILOT_MAX_STEPS
 const envLoopBreaker = process.env.CURSORPILOT_LOOP_BREAKER
   ? Number(process.env.CURSORPILOT_LOOP_BREAKER)
   : undefined;
+const envIdleMs = process.env.CURSORPILOT_IDLE_MS ? Number(process.env.CURSORPILOT_IDLE_MS) : 5000;
+const envAutoAnswerIdle = Boolean(
+  process.env.CURSORPILOT_AUTO_ANSWER_IDLE &&
+    process.env.CURSORPILOT_AUTO_ANSWER_IDLE !== '0' &&
+    process.env.CURSORPILOT_AUTO_ANSWER_IDLE.toLowerCase() !== 'false'
+);
 
 const program = new Command();
 program
@@ -45,6 +51,12 @@ program
     (v) => Number(v),
     envLoopBreaker
   )
+  .option('--idle-ms <num>', 'Idle threshold for inference (ms)', (v) => Number(v), envIdleMs)
+  .option(
+    '--auto-answer-idle',
+    'Automatically type safe answers on idle (y/n or numeric)',
+    envAutoAnswerIdle
+  )
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -60,6 +72,8 @@ program
       timeoutMs?: number;
       maxSteps?: number;
       loopBreaker?: number;
+      idleMs?: number;
+      autoAnswerIdle?: boolean;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -73,6 +87,8 @@ program
         timeoutMs: opts.timeoutMs,
         maxSteps: opts.maxSteps,
         loopBreaker: opts.loopBreaker,
+        idleMs: opts.idleMs,
+        autoAnswerIdle: opts.autoAnswerIdle,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }

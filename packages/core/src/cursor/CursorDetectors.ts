@@ -1,7 +1,7 @@
 import { defaultDetectorPatterns } from '@cursor-pilot/detectors';
 
 /** Event categories emitted by the output classifier. */
-export type CursorEventType = 'running' | 'awaitingInput' | 'question' | 'completed';
+export type CursorEventType = 'running' | 'awaitingInput' | 'question' | 'completed' | 'idle';
 
 /**
  * Streaming classifier using regex patterns with a simple idle debounce.
@@ -43,6 +43,8 @@ export class CursorDetectors {
           return 'awaitingInput';
         }
       }
+      this.lastEmitAt = now;
+      return 'idle';
     }
 
     return 'running';
