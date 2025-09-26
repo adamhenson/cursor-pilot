@@ -40,7 +40,11 @@ export class CursorProcess {
   public async execCursor(args: string[]): Promise<void> {
     if (!this.ptyProc) return;
     const command = `${this.options.cursorBinary} ${args.join(' ')}`.trim();
-    this.ptyProc.write(`${command}\r`);
+    const marker = '__CURSORPILOT_DONE__';
+    // Single-quote for sh -lc; escape any single quotes in the command
+    const sq = (s: string) => `'${s.replace(/'/g, `'\''`)}'`;
+    const wrapped = `sh -lc ${sq(`${command}; printf ${marker}\\n`)}`;
+    this.ptyProc.write(`${wrapped}\r`);
   }
 
   /** Subscribe to raw PTY output data chunks. */

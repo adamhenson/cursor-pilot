@@ -101,6 +101,13 @@ export class Orchestrator {
     const planCursorArgs = plan?.steps?.[0]?.cursor ?? [];
     const argv = (args && args.length > 0 ? args : planCursorArgs) ?? [];
 
+    // Determine if any interactive cursor steps exist
+    const hasInteractiveCursor = Boolean(
+      plan?.steps?.some((s) =>
+        s.cursor?.some((c) => (c.split(' ').filter(Boolean)[0] ?? '') === 'agent')
+      )
+    );
+
     if (dryRun) {
       // eslint-disable-next-line no-console
       console.log('[CursorPilot] Dry run: would start Cursor with:', {
@@ -116,6 +123,7 @@ export class Orchestrator {
         loopBreaker: this.options.loopBreaker,
         idleMs: this.options.idleMs,
         autoAnswerIdle: this.options.autoAnswerIdle,
+        hasInteractiveCursor,
       });
       return;
     }
@@ -126,8 +134,7 @@ export class Orchestrator {
       ? new Transcript({ logDir: this.options.logDir })
       : undefined;
 
-    // Preflight: ensure cursor binary exists on PATH
-    const cursorBinary = this.options.cursorBinary ?? 'cursor';
+    const cursorBinary = this.options.cursorBinary ?? 'cursor-agent';
     const which = await runShellCommand({ cmd: `command -v ${cursorBinary}`, cwd });
     if (which.exitCode !== 0) {
       const msg = `Cursor binary not found on PATH: ${cursorBinary}. Install it or pass --cursor.`;
@@ -144,29 +151,57 @@ export class Orchestrator {
       }, this.options.timeoutMs);
     }
 
-    this.process = new CursorProcess({
-      cursorBinary,
-      cwd,
-    });
+    if (hasInteractiveCursor) {
+      this.process = new CursorProcess({
+        cursorBinary,
+        cwd,
+      });
 
-    await this.process.start([]);
+      await this.process.start([]);
 
-    const system = baseSystemPrompt();
-    const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
+      const system = baseSystemPrompt();
+      const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
 
-    this.process.onData(async (chunk) => {
-      this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
+      this.process.onData(async (chunk) => {
+        this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
 
-      const eventType = this.detectors?.ingestChunk(chunk);
-      if (!eventType) return;
-      const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
-      // eslint-disable-next-line no-console
-      console.log('[CursorPilot] event:', event.type);
-      this.transcript?.write({ ts: Date.now(), type: event.type });
+        const eventType = this.detectors?.ingestChunk(chunk);
+        if (!eventType) return;
+        const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
+        // eslint-disable-next-line no-console
+        console.log('[CursorPilot] event:', event.type);
+        this.transcript?.write({ ts: Date.now(), type: event.type });
 
-      if (event.type === 'idle') {
-        this.consecutiveIdle += 1;
-        if (this.consecutiveIdle >= 2) {
+        if (event.type === 'idle') {
+          this.consecutiveIdle += 1;
+          if (this.consecutiveIdle >= 2) {
+            const { userPrompt } = await buildContext({
+              governingPrompt: governing,
+              recentOutput: chunk,
+              cwd,
+            });
+            const { text } = await provider.complete({
+              system,
+              user: userPrompt,
+              maxTokens: 16,
+              temperature: this.options.temperature ?? 0,
+            });
+            this.transcript?.write({ ts: Date.now(), type: 'idle-suggestion', answer: text });
+            if (this.options.autoAnswerIdle && (/^(y|n)$/i.test(text) || /^\d+$/.test(text))) {
+              await this.process?.write(text);
+            }
+          }
+          return;
+        }
+        this.consecutiveIdle = 0;
+
+        if (event.type === 'question' || event.type === 'awaitingInput') {
+          if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
+            this.transcript?.write({ ts: Date.now(), type: 'max-steps-reached' });
+            await this.stop();
+            return;
+          }
+
           const { userPrompt } = await buildContext({
             governingPrompt: governing,
             recentOutput: chunk,
@@ -178,59 +213,32 @@ export class Orchestrator {
             maxTokens: 16,
             temperature: this.options.temperature ?? 0,
           });
-          this.transcript?.write({ ts: Date.now(), type: 'idle-suggestion', answer: text });
-          // Only auto-answer trivial cases when explicitly enabled
-          if (this.options.autoAnswerIdle && (/^(y|n)$/i.test(text) || /^\d+$/.test(text))) {
-            await this.process?.write(text);
+
+          const qaHash = `${event.type}|${text}`;
+          if (this.lastQAHash === qaHash) {
+            this.repeatedCount += 1;
+            if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
+              this.transcript?.write({ ts: Date.now(), type: 'loop-breaker', answer: text });
+              await this.stop();
+              return;
+            }
+          } else {
+            this.lastQAHash = qaHash;
+            this.repeatedCount = 0;
           }
-        }
-        return;
-      }
-      this.consecutiveIdle = 0;
 
-      if (event.type === 'question' || event.type === 'awaitingInput') {
-        if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
-          this.transcript?.write({ ts: Date.now(), type: 'max-steps-reached' });
-          await this.stop();
-          return;
-        }
-
-        const { userPrompt } = await buildContext({
-          governingPrompt: governing,
-          recentOutput: chunk,
-          cwd,
-        });
-        const { text } = await provider.complete({
-          system,
-          user: userPrompt,
-          maxTokens: 16,
-          temperature: this.options.temperature ?? 0,
-        });
-
-        const qaHash = `${event.type}|${text}`;
-        if (this.lastQAHash === qaHash) {
-          this.repeatedCount += 1;
-          if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
-            this.transcript?.write({ ts: Date.now(), type: 'loop-breaker', answer: text });
-            await this.stop();
-            return;
-          }
-        } else {
-          this.lastQAHash = qaHash;
-          this.repeatedCount = 0;
-        }
-
-        this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
-        // eslint-disable-next-line no-console
-        console.log('[CursorPilot] answer:', text);
-        if (this.options.echoAnswers) {
+          this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
           // eslint-disable-next-line no-console
-          console.log(`[CursorPilot] typed: ${text}`);
+          console.log('[CursorPilot] answer:', text);
+          if (this.options.echoAnswers) {
+            // eslint-disable-next-line no-console
+            console.log(`[CursorPilot] typed: ${text}`);
+          }
+          await this.process?.write(text);
+          this.answersTyped += 1;
         }
-        await this.process?.write(text);
-        this.answersTyped += 1;
-      }
-    });
+      });
+    }
 
     // Execute plan steps sequentially (basic version)
     if (plan?.steps?.length) {
@@ -253,18 +261,51 @@ export class Orchestrator {
         if (step.cursor?.length) {
           for (const cargs of step.cursor) {
             const parts = cargs.split(' ').filter(Boolean);
-            await this.process.execCursor(parts);
+            const isInteractive = parts[0] === 'agent';
+            if (!isInteractive) {
+              const cursorCmd = `${cursorBinary} ${cargs}`;
+              const { exitCode, stdout, stderr } = await runShellCommand({ cmd: cursorCmd, cwd });
+              this.transcript?.write({
+                ts: Date.now(),
+                type: 'cursor-run',
+                chunk: `$ ${cursorCmd}\n${stdout}${stderr}`,
+              });
+              if (exitCode !== 0) {
+                this.transcript?.write({
+                  ts: Date.now(),
+                  type: 'cursor-error',
+                  chunk: stderr || String(exitCode),
+                });
+                await this.stop();
+                return;
+              }
+              continue;
+            }
+            await this.process?.execCursor(parts);
             const deadline = Date.now() + (this.options.cursorCmdTimeoutMs ?? 20000);
             let completed = false;
             let lastChunk = '';
+            let buffer = '';
+            const marker = '__CURSORPILOT_DONE__';
+            const promptRe = /\n[^\n]*\$\s?$/; // crude shell prompt heuristic
             const onData = async (chunk: string) => {
               lastChunk = chunk;
+              buffer += chunk;
+              if (buffer.length > 10_000) buffer = buffer.slice(-10_000);
+              if (buffer.includes(marker)) {
+                completed = true;
+                return;
+              }
               const type = this.detectors?.ingestChunk(chunk);
               if (type === 'completed') {
                 completed = true;
+                return;
+              }
+              if (promptRe.test(buffer)) {
+                completed = true;
               }
             };
-            this.process.onData(onData);
+            this.process?.onData(onData);
             while (Date.now() < deadline && !completed) {
               // eslint-disable-next-line no-await-in-loop
               await new Promise((r) => setTimeout(r, 200));
@@ -282,6 +323,9 @@ export class Orchestrator {
           }
         }
       }
+      this.transcript?.write({ ts: Date.now(), type: 'plan-completed' });
+      await this.stop();
+      return;
     }
   }
 
