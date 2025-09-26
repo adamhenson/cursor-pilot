@@ -41,6 +41,8 @@ export type OrchestratorOptions = {
   autoAnswerIdle?: boolean;
   /** Whether to echo typed answers to stdout */
   echoAnswers?: boolean;
+  /** Maximum wall-clock time for a single cursor command (ms) */
+  cursorCmdTimeoutMs?: number;
 };
 
 async function resolveGoverningPrompt(
@@ -252,8 +254,31 @@ export class Orchestrator {
           for (const cargs of step.cursor) {
             const parts = cargs.split(' ').filter(Boolean);
             await this.process.execCursor(parts);
-            // Best-effort wait loop: expect either 'completed' or a prompt sequence will follow
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            const deadline = Date.now() + (this.options.cursorCmdTimeoutMs ?? 20000);
+            let completed = false;
+            let lastChunk = '';
+            const onData = async (chunk: string) => {
+              lastChunk = chunk;
+              const type = this.detectors?.ingestChunk(chunk);
+              if (type === 'completed') {
+                completed = true;
+              }
+            };
+            this.process.onData(onData);
+            while (Date.now() < deadline && !completed) {
+              // eslint-disable-next-line no-await-in-loop
+              await new Promise((r) => setTimeout(r, 200));
+              if (/unknown option|not found/i.test(lastChunk)) {
+                this.transcript?.write({ ts: Date.now(), type: 'cursor-error', chunk: lastChunk });
+                await this.stop();
+                return;
+              }
+            }
+            if (!completed) {
+              this.transcript?.write({ ts: Date.now(), type: 'cursor-timeout', chunk: cargs });
+              await this.stop();
+              return;
+            }
           }
         }
       }

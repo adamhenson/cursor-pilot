@@ -25,6 +25,9 @@ const envEchoAnswers = Boolean(
     process.env.ECHO_ANSWERS !== '0' &&
     process.env.ECHO_ANSWERS.toLowerCase() !== 'false'
 );
+const envCursorCmdTimeoutMs = process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS
+  ? Number(process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS)
+  : 20000;
 
 const program = new Command();
 program
@@ -63,6 +66,12 @@ program
     envAutoAnswerIdle
   )
   .option('--echo-answers', 'Echo typed answers to stdout', envEchoAnswers)
+  .option(
+    '--cursor-cmd-timeout-ms <num>',
+    'Timeout for each cursor-agent command (ms)',
+    (v) => Number(v),
+    envCursorCmdTimeoutMs
+  )
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -81,6 +90,7 @@ program
       idleMs?: number;
       autoAnswerIdle?: boolean;
       echoAnswers?: boolean;
+      cursorCmdTimeoutMs?: number;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -97,6 +107,7 @@ program
         idleMs: opts.idleMs,
         autoAnswerIdle: opts.autoAnswerIdle,
         echoAnswers: opts.echoAnswers,
+        cursorCmdTimeoutMs: opts.cursorCmdTimeoutMs,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }
