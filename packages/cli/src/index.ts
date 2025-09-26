@@ -5,6 +5,16 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const envTimeout = process.env.CURSORPILOT_TIMEOUT_MS
+  ? Number(process.env.CURSORPILOT_TIMEOUT_MS)
+  : undefined;
+const envMaxSteps = process.env.CURSORPILOT_MAX_STEPS
+  ? Number(process.env.CURSORPILOT_MAX_STEPS)
+  : undefined;
+const envLoopBreaker = process.env.CURSORPILOT_LOOP_BREAKER
+  ? Number(process.env.CURSORPILOT_LOOP_BREAKER)
+  : undefined;
+
 const program = new Command();
 program
   .name('cursor-pilot')
@@ -27,6 +37,14 @@ program
   .option('--prompt <pathOrText>', 'Governing prompt path or literal text')
   .option('--plan <path>', 'Path to plan.yml')
   .option('--log <dir>', 'Directory to write transcript logs', process.env.CURSORPILOT_LOG_DIR)
+  .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
+  .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
+  .option(
+    '--loop-breaker <num>',
+    'Stop if same Q/A repeats N times',
+    (v) => Number(v),
+    envLoopBreaker
+  )
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -39,6 +57,9 @@ program
       prompt?: string;
       plan?: string;
       log?: string;
+      timeoutMs?: number;
+      maxSteps?: number;
+      loopBreaker?: number;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -49,6 +70,9 @@ program
         governingPrompt: opts.prompt,
         planPath: opts.plan,
         logDir: opts.log,
+        timeoutMs: opts.timeoutMs,
+        maxSteps: opts.maxSteps,
+        loopBreaker: opts.loopBreaker,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }

@@ -28,6 +28,12 @@ export type OrchestratorOptions = {
   planPath?: string;
   /** Optional directory to write transcript logs to */
   logDir?: string;
+  /** Maximum wall-clock time for the run (ms) */
+  timeoutMs?: number;
+  /** Maximum number of answers to type */
+  maxSteps?: number;
+  /** Loop breaker: stop if same Q/A repeats this many times */
+  loopBreaker?: number;
 };
 
 async function resolveGoverningPrompt(
@@ -54,6 +60,10 @@ export class Orchestrator {
   private process?: CursorProcess;
   private detectors: CursorDetectors | undefined;
   private transcript: Transcript | undefined;
+  private answersTyped = 0;
+  private lastQAHash: string | undefined;
+  private repeatedCount = 0;
+  private stopTimer: NodeJS.Timeout | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -91,6 +101,9 @@ export class Orchestrator {
         model: this.options.model,
         temperature: this.options.temperature,
         plan: plan ? { name: plan.name, steps: plan.steps.map((s) => s.name) } : undefined,
+        timeoutMs: this.options.timeoutMs,
+        maxSteps: this.options.maxSteps,
+        loopBreaker: this.options.loopBreaker,
       });
       return;
     }
@@ -100,6 +113,13 @@ export class Orchestrator {
     this.transcript = this.options.logDir
       ? new Transcript({ logDir: this.options.logDir })
       : undefined;
+
+    if (this.options.timeoutMs && this.options.timeoutMs > 0) {
+      this.stopTimer = setTimeout(async () => {
+        this.transcript?.write({ ts: Date.now(), type: 'timeout' });
+        await this.stop();
+      }, this.options.timeoutMs);
+    }
 
     this.process = new CursorProcess({
       cursorBinary: this.options.cursorBinary ?? 'cursor',
@@ -122,6 +142,12 @@ export class Orchestrator {
       this.transcript?.write({ ts: Date.now(), type: event.type });
 
       if (event.type === 'question' || event.type === 'awaitingInput') {
+        if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
+          this.transcript?.write({ ts: Date.now(), type: 'max-steps-reached' });
+          await this.stop();
+          return;
+        }
+
         const { userPrompt } = await buildContext({
           governingPrompt: governing,
           recentOutput: chunk,
@@ -133,16 +159,32 @@ export class Orchestrator {
           maxTokens: 16,
           temperature: this.options.temperature ?? 0,
         });
+
+        const qaHash = `${event.type}|${text}`;
+        if (this.lastQAHash === qaHash) {
+          this.repeatedCount += 1;
+          if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
+            this.transcript?.write({ ts: Date.now(), type: 'loop-breaker', answer: text });
+            await this.stop();
+            return;
+          }
+        } else {
+          this.lastQAHash = qaHash;
+          this.repeatedCount = 0;
+        }
+
         this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
         // eslint-disable-next-line no-console
         console.log('[CursorPilot] answer:', text);
         await this.process?.write(text);
+        this.answersTyped += 1;
       }
     });
   }
 
   /** Stop the run session and clean up the PTY process. */
   public async stop(): Promise<void> {
+    if (this.stopTimer) clearTimeout(this.stopTimer);
     await this.process?.dispose();
     this.transcript?.close();
     this.process = undefined;
