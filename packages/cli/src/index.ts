@@ -34,6 +34,11 @@ const envVerboseEvents = Boolean(
     process.env.CURSORPILOT_VERBOSE_EVENTS !== '0' &&
     process.env.CURSORPILOT_VERBOSE_EVENTS.toLowerCase() !== 'false'
 );
+const envAutoApprove = Boolean(
+  process.env.CURSORPILOT_AUTO_APPROVE &&
+    process.env.CURSORPILOT_AUTO_APPROVE !== '0' &&
+    process.env.CURSORPILOT_AUTO_APPROVE.toLowerCase() !== 'false'
+);
 const envLogLLM = Boolean(
   process.env.CURSORPILOT_LOG_LLM &&
     process.env.CURSORPILOT_LOG_LLM !== '0' &&
@@ -84,6 +89,7 @@ program
     envAutoAnswerIdle
   )
   .option('--echo-answers', 'Echo typed answers to stdout', envEchoAnswers)
+  .option('--auto-approve', 'Auto-approve Cursor run prompts', envAutoApprove)
   .option(
     '--cursor-cmd-timeout-ms <num>',
     'Timeout for each cursor-agent command (ms)',
@@ -109,6 +115,7 @@ program
       idleMs?: number;
       autoAnswerIdle?: boolean;
       echoAnswers?: boolean;
+      autoApprove?: boolean;
       cursorCmdTimeoutMs?: number;
       detectors?: string;
       verboseEvents?: boolean;
@@ -141,7 +148,10 @@ program
         console.log('[CursorPilot] Effective config:', effective);
       }
 
-      const orchestrator = new Orchestrator(effective as any);
+      const orchestrator = new Orchestrator({
+        ...effective,
+        autoApprovePrompts: opts.autoApprove,
+      } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }
   );

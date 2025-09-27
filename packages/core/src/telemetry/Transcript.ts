@@ -27,6 +27,8 @@ export type TranscriptRecord = {
   user?: string;
   /** Optional LLM response text */
   text?: string;
+  /** Optional error message text */
+  error?: string;
 };
 
 /** Lightweight JSONL transcript writer for session events and answers. */

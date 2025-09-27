@@ -50,6 +50,8 @@ export type OrchestratorOptions = {
   verboseEvents?: boolean;
   /** Whether to log prompts and responses to transcript */
   logLlm?: boolean;
+  /** Whether to auto-approve run prompts without asking the LLM */
+  autoApprovePrompts?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -83,6 +85,7 @@ export class Orchestrator {
   private consecutiveIdle = 0;
   private readonly verboseEvents: boolean;
   private readonly logLlm: boolean;
+  private readonly autoApprovePrompts: boolean;
   private trustedWorkspace = false;
 
   /** Construct a new orchestrator with the provided options. */
@@ -90,6 +93,7 @@ export class Orchestrator {
     this.options = options;
     this.verboseEvents = Boolean(options.verboseEvents);
     this.logLlm = Boolean(options.logLlm);
+    this.autoApprovePrompts = Boolean(options.autoApprovePrompts);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -223,15 +227,56 @@ export class Orchestrator {
           return;
         }
 
-        // Auto-approve run confirmation prompts
+        // Handle run confirmation prompts
         if (/Run this command\?/i.test(chunk) || /Not in allowlist:/i.test(chunk)) {
-          if (this.options.echoAnswers) {
-            // eslint-disable-next-line no-console
-            console.log('[CursorPilot] typed: y');
+          if (this.autoApprovePrompts) {
+            if (this.options.echoAnswers) {
+              // eslint-disable-next-line no-console
+              console.log('[CursorPilot] typed: y');
+            }
+            await this.process?.write('y');
+            this.transcript?.write({ ts: Date.now(), type: 'auto-approve' });
+            return;
           }
-          await this.process?.write('y');
-          this.transcript?.write({ ts: Date.now(), type: 'auto-approve' });
-          return;
+          // Otherwise, send to LLM as a question
+          const { userPrompt } = await buildContext({
+            governingPrompt: governingText,
+            recentOutput: chunk,
+            cwd,
+          });
+          if (this.logLlm) {
+            this.transcript?.write({
+              ts: Date.now(),
+              type: 'llm-prompt',
+              scope: 'qa',
+              system,
+              user: userPrompt,
+            });
+          }
+          try {
+            const { text } = await provider.complete({
+              system,
+              user: userPrompt,
+              maxTokens: 16,
+              temperature: this.options.temperature ?? 0,
+            });
+            if (this.logLlm) {
+              this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'qa', text });
+            }
+            this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
+            if (this.options.echoAnswers) {
+              // eslint-disable-next-line no-console
+              console.log('[CursorPilot] typed:', text);
+            }
+            await this.process?.write(text);
+            return;
+          } catch (err: any) {
+            this.transcript?.write({
+              ts: Date.now(),
+              type: 'llm-error',
+              error: String(err?.message ?? err),
+            });
+          }
         }
 
         const eventType = this.detectors?.ingestChunk(chunk);
