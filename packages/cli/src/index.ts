@@ -167,6 +167,8 @@ program
         logLlm: opts.logLlm,
         transcriptMaxLines: opts.transcriptMaxLines,
         tui: opts.tui,
+        autoApprovePrompts: opts.autoApprove,
+        echoGoverning: opts.echoGoverning,
       } as const;
 
       if (opts.printConfig) {
@@ -176,8 +178,8 @@ program
 
       const orchestrator = new Orchestrator({
         ...effective,
-        autoApprovePrompts: opts.autoApprove,
-        echoGoverning: opts.echoGoverning,
+        autoApprovePrompts: effective.autoApprovePrompts,
+        echoGoverning: effective.echoGoverning,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }
