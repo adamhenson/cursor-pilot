@@ -89,6 +89,7 @@ export class Orchestrator {
   private readonly logLlm: boolean;
   private readonly autoApprovePrompts: boolean;
   private readonly echoGoverning: boolean;
+  private seedNudgeTimer: NodeJS.Timeout | undefined;
   private trustedWorkspace = false;
 
   /** Construct a new orchestrator with the provided options. */
@@ -452,6 +453,22 @@ export class Orchestrator {
                 type: 'seed-prompt-content',
                 chunk: governingText,
               });
+              // After seeding, if still idle after 3s, send a small nudge
+              if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
+              this.seedNudgeTimer = setTimeout(async () => {
+                if (this.options.echoAnswers) {
+                  // eslint-disable-next-line no-console
+                  console.log('[CursorPilot] typed: [nudge Enter]');
+                }
+                await this.process?.write('');
+                await new Promise((r) => setTimeout(r, 200));
+                if (this.options.echoAnswers) {
+                  // eslint-disable-next-line no-console
+                  console.log('[CursorPilot] typed: Auto');
+                }
+                await this.process?.write('Auto');
+                this.transcript?.write({ ts: Date.now(), type: 'nudge' });
+              }, 3000);
             }
             // Mark interactive session started; subsequent plan steps are skipped
             interactiveStarted = true;
@@ -473,6 +490,7 @@ export class Orchestrator {
   /** Stop the run session and clean up the PTY process. */
   public async stop(): Promise<void> {
     if (this.stopTimer) clearTimeout(this.stopTimer);
+    if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
     await this.process?.dispose();
     this.transcript?.close();
     this.process = undefined;

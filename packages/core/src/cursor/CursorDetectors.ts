@@ -23,6 +23,7 @@ function withMultiline(patterns: RegExp[]): RegExp[] {
 export class CursorDetectors {
   private buffer = '';
   private lastEmitAt = 0;
+  private lastMeaningfulAt = 0;
   private readonly idleThresholdMs: number;
   private readonly patterns: Required<DetectorPatterns>;
 
@@ -48,7 +49,13 @@ export class CursorDetectors {
   public ingestChunk(chunk: string): CursorEventType | null {
     this.buffer += chunk;
     const now = Date.now();
-    const idle = now - this.lastEmitAt > this.idleThresholdMs;
+    // Detect meaningful (non-ANSI, non-whitespace) characters to gate idle
+    const ansiStripped = stripAnsiSequences(chunk);
+    if (containsMeaningfulText(ansiStripped)) {
+      this.lastMeaningfulAt = now;
+    }
+    const refTs = this.lastMeaningfulAt || this.lastEmitAt;
+    const idle = now - refTs > this.idleThresholdMs;
 
     // Completion wins
     for (const re of this.patterns.completion) {
@@ -80,4 +87,60 @@ export class CursorDetectors {
 
     return 'running';
   }
+}
+
+/** Remove common ANSI CSI/OSC sequences without using control-char regex literals. */
+function stripAnsiSequences(input: string): string {
+  let result = '';
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    const code = input.charCodeAt(i);
+    if (code === 0x1b /* ESC */ && i + 1 < n) {
+      const next = input.charAt(i + 1);
+      if (next === '[') {
+        // CSI: ESC [ ... letter
+        i += 2;
+        while (i < n) {
+          const ch = input.charAt(i);
+          if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+            i += 1;
+            break;
+          }
+          i += 1;
+        }
+        continue;
+      }
+      if (next === ']') {
+        // OSC: ESC ] ... BEL (0x07)
+        i += 2;
+        while (i < n && input.charCodeAt(i) !== 0x07) i += 1;
+        if (i < n) i += 1; // consume BEL
+        continue;
+      }
+    }
+    result += input.charAt(i);
+    i += 1;
+  }
+  return result;
+}
+
+function containsMeaningfulText(input: string): boolean {
+  for (let i = 0; i < input.length; i += 1) {
+    const code = input.charCodeAt(i);
+    // Skip whitespace and C0 controls (<= 0x20) and DEL (0x7F)
+    if (
+      code <= 0x20 ||
+      code === 0x7f ||
+      code === 0x00 ||
+      code === 0x09 ||
+      code === 0x0a ||
+      code === 0x0d ||
+      code === 0x20
+    ) {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
