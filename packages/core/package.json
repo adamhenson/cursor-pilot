@@ -13,12 +13,14 @@
   "dependencies": {
     "@cursor-pilot/detectors": "0.0.0",
     "@cursor-pilot/types": "0.0.0",
+    "blessed": "^0.1.81",
     "node-pty": "^1.0.0",
     "openai": "^5.23.1",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "@types/blessed": "^0.1.25",
     "vitest": "^2.1.9"
   }
 }

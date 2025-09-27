@@ -10,6 +10,7 @@ import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
 import { Transcript } from '../telemetry/Transcript.js';
+import { Tui } from '../telemetry/Tui.js';
 import type { OrchestratorEvent } from './Events.js';
 
 /** Options that configure the orchestrator runtime behavior. */
@@ -98,6 +99,7 @@ export class Orchestrator {
   private approvalFallbackTimer: NodeJS.Timeout | undefined;
   private trustedWorkspace = false;
   private readonly useTui: boolean;
+  private tui: Tui | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -190,6 +192,7 @@ export class Orchestrator {
     this.transcript = this.options.logDir
       ? new Transcript({ logDir: this.options.logDir, maxLines: this.options.transcriptMaxLines })
       : undefined;
+    if (this.useTui) this.tui = new Tui();
 
     const cursorBinary = this.options.cursorBinary ?? 'cursor-agent';
     const which = await runShellCommand({ cmd: `command -v ${cursorBinary}`, cwd });
@@ -222,6 +225,10 @@ export class Orchestrator {
         // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
         if (!this.useTui) process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
+        if (this.useTui) {
+          const snippet = stripAnsi(chunk);
+          this.tui?.append(snippet);
+        }
 
         // Auto-accept workspace trust prompt if detected
         if (
@@ -335,11 +342,14 @@ export class Orchestrator {
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
         const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
-        if (this.verboseEvents) {
+        if (this.verboseEvents && !this.useTui) {
           // eslint-disable-next-line no-console
           console.log('[CursorPilot] event:', event.type);
         }
         this.transcript?.write({ ts: Date.now(), type: event.type });
+        if (this.useTui) {
+          this.tui?.setStatus([`Event: ${event.type}`, `Answers typed: ${this.answersTyped}`]);
+        }
 
         if (event.type === 'idle') {
           this.consecutiveIdle += 1;
@@ -544,4 +554,37 @@ export class Orchestrator {
     this.transcript?.close();
     this.process = undefined;
   }
+}
+
+function stripAnsi(input: string): string {
+  let result = '';
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    const c = input.charCodeAt(i);
+    if (c === 0x1b && i + 1 < n) {
+      const next = input.charAt(i + 1);
+      if (next === '[') {
+        i += 2;
+        while (i < n) {
+          const ch = input.charAt(i);
+          if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+            i += 1;
+            break;
+          }
+          i += 1;
+        }
+        continue;
+      }
+      if (next === ']') {
+        i += 2;
+        while (i < n && input.charCodeAt(i) !== 0x07) i += 1;
+        if (i < n) i += 1;
+        continue;
+      }
+    }
+    result += input.charAt(i);
+    i += 1;
+  }
+  return result;
 }
