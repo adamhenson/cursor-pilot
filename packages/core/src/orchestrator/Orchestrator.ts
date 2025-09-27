@@ -10,6 +10,7 @@ import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
 import { Transcript } from '../telemetry/Transcript.js';
+import { Tui } from '../telemetry/Tui.js';
 
 /** Options that configure the orchestrator runtime behavior. */
 export type OrchestratorOptions = {
@@ -97,6 +98,7 @@ export class Orchestrator {
   private approvalFallbackTimer: NodeJS.Timeout | undefined;
   private trustedWorkspace = false;
   private readonly useTui: boolean;
+  private tui: Tui | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -189,6 +191,7 @@ export class Orchestrator {
     this.transcript = this.options.logDir
       ? new Transcript({ logDir: this.options.logDir, maxLines: this.options.transcriptMaxLines })
       : undefined;
+    if (this.useTui) this.tui = new Tui();
 
     const cursorBinary = this.options.cursorBinary ?? 'cursor-agent';
     const which = await runShellCommand({ cmd: `command -v ${cursorBinary}`, cwd });
@@ -221,6 +224,7 @@ export class Orchestrator {
         // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
         if (!this.useTui) process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
+        if (this.useTui) this.tui?.append(chunk);
         // In TUI mode we mirror raw PTY output only (no overlay rendering)
 
         // Auto-accept workspace trust prompt if detected
@@ -540,6 +544,7 @@ export class Orchestrator {
     if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
     if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
     await this.process?.dispose();
+    if (this.tui) this.tui.destroy();
     this.transcript?.close();
     this.process = undefined;
   }
