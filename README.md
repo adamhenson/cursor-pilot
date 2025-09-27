@@ -133,3 +133,25 @@ node packages/cli/dist/index.js run \
 ## Notes
 - Providers: `mock` is bundled for tests; `openai` stub requires `OPENAI_API_KEY`.
 - Detectors: configurable defaults under `@cursor-pilot/detectors`.
+
+## Live Output and Events
+
+- **--verbose-events**: Print orchestrator event types (e.g., `running`, `idle`, `question`, `awaitingInput`, `completed`).
+  - CLI: `--verbose-events`
+  - Env: `CURSORPILOT_VERBOSE_EVENTS=true`
+- **Output mirroring**: Non-interactive command stdout/stderr are mirrored directly to the console so you can see what Cursor (or the mock agent) prints.
+- **Echo answers**: Show what CursorPilot types back to the agent.
+  - CLI: `--echo-answers`
+  - Env: `ECHO_ANSWERS=true`
+
+Example:
+```bash
+node packages/cli/dist/index.js run \
+  --cursor "node scripts/mock-cursor-agent.mjs" \
+  --plan ./plan-mock.yml \
+  --provider mock \
+  --verbose-events \
+  --echo-answers \
+  --idle-ms 1000 \
+  --auto-answer-idle
+```
