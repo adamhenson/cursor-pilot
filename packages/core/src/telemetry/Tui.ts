@@ -1,4 +1,4 @@
-import { Terminal } from '@xterm/headless';
+import HeadlessTerminal from '@xterm/headless';
 import blessed from 'blessed';
 
 /** Minimal blessed-based TUI to show recent output and status with CR-aware rendering. */
@@ -6,7 +6,7 @@ export class Tui {
   private screen: blessed.Widgets.Screen;
   private logBox: blessed.Widgets.BoxElement;
   private statusBox: blessed.Widgets.BoxElement;
-  private term: Terminal;
+  private term: any;
   private renderScheduled = false;
   private frameBuffer = '';
 
@@ -35,8 +35,8 @@ export class Tui {
     });
     this.screen.key(['q', 'C-c'], () => this.destroy());
     this.screen.render();
-    this.term = new Terminal({ cols: 120, rows: 40 });
-    this.term.onData((data) => {
+    this.term = new (HeadlessTerminal as any)({ cols: 120, rows: 40 });
+    this.term.onData((data: string) => {
       // Headless terminal emits input; ignore for now
     });
   }
