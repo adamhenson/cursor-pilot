@@ -10,8 +10,6 @@ import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
 import { Transcript } from '../telemetry/Transcript.js';
-import { Tui } from '../telemetry/Tui.js';
-import type { OrchestratorEvent } from './Events.js';
 
 /** Options that configure the orchestrator runtime behavior. */
 export type OrchestratorOptions = {
@@ -99,7 +97,6 @@ export class Orchestrator {
   private approvalFallbackTimer: NodeJS.Timeout | undefined;
   private trustedWorkspace = false;
   private readonly useTui: boolean;
-  private tui: Tui | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -192,7 +189,6 @@ export class Orchestrator {
     this.transcript = this.options.logDir
       ? new Transcript({ logDir: this.options.logDir, maxLines: this.options.transcriptMaxLines })
       : undefined;
-    if (this.useTui) this.tui = new Tui();
 
     const cursorBinary = this.options.cursorBinary ?? 'cursor-agent';
     const which = await runShellCommand({ cmd: `command -v ${cursorBinary}`, cwd });
@@ -225,10 +221,7 @@ export class Orchestrator {
         // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
         if (!this.useTui) process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
-        if (this.useTui) {
-          const snippet = stripAnsi(chunk);
-          this.tui?.append(snippet);
-        }
+        // In TUI mode we mirror raw PTY output only (no overlay rendering)
 
         // Auto-accept workspace trust prompt if detected
         if (
@@ -341,17 +334,13 @@ export class Orchestrator {
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
-        const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
         if (this.verboseEvents && !this.useTui) {
           // eslint-disable-next-line no-console
-          console.log('[CursorPilot] event:', event.type);
+          console.log('[CursorPilot] event:', eventType);
         }
-        this.transcript?.write({ ts: Date.now(), type: event.type });
-        if (this.useTui) {
-          this.tui?.setStatus([`Event: ${event.type}`, `Answers typed: ${this.answersTyped}`]);
-        }
+        this.transcript?.write({ ts: Date.now(), type: eventType });
 
-        if (event.type === 'idle') {
+        if (eventType === 'idle') {
           this.consecutiveIdle += 1;
           if (this.consecutiveIdle >= 2) {
             const { userPrompt } = await buildContext({
@@ -390,7 +379,7 @@ export class Orchestrator {
         }
         this.consecutiveIdle = 0;
 
-        if (event.type === 'question' || event.type === 'awaitingInput') {
+        if (eventType === 'question' || eventType === 'awaitingInput') {
           if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
             this.transcript?.write({ ts: Date.now(), type: 'max-steps-reached' });
             await this.stop();
@@ -421,7 +410,7 @@ export class Orchestrator {
             this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'qa', text });
           }
 
-          const qaHash = `${event.type}|${text}`;
+          const qaHash = `${eventType}|${text}`;
           if (this.lastQAHash === qaHash) {
             this.repeatedCount += 1;
             if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
@@ -495,13 +484,13 @@ export class Orchestrator {
             await this.process?.execCursor(parts);
             // Inject governing prompt once at startup to orient the agent
             if (governingText && governingText.trim().length > 0) {
-              // eslint-disable-next-line no-console
-              if (this.options.echoAnswers) console.log('[CursorPilot] typed: [governing prompt]');
+              if (this.options.echoAnswers && !this.useTui)
+                console.log('[CursorPilot] typed: [governing prompt]');
               await new Promise((r) => setTimeout(r, 500));
               await this.process?.write(governingText);
               await new Promise((r) => setTimeout(r, 300));
               await this.process?.write('');
-              if (this.echoGoverning) {
+              if (this.echoGoverning && !this.useTui) {
                 // eslint-disable-next-line no-console
                 console.log('[CursorPilot] governing prompt:\n', governingText);
               }
@@ -514,13 +503,13 @@ export class Orchestrator {
               // After seeding, if still idle after 3s, send a small nudge
               if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
               this.seedNudgeTimer = setTimeout(async () => {
-                if (this.options.echoAnswers) {
+                if (this.options.echoAnswers && !this.useTui) {
                   // eslint-disable-next-line no-console
                   console.log('[CursorPilot] typed: [nudge Enter]');
                 }
                 await this.process?.write('');
                 await new Promise((r) => setTimeout(r, 200));
-                if (this.options.echoAnswers) {
+                if (this.options.echoAnswers && !this.useTui) {
                   // eslint-disable-next-line no-console
                   console.log('[CursorPilot] typed: Auto');
                 }
