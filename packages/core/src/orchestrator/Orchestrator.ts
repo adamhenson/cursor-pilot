@@ -46,6 +46,8 @@ export type OrchestratorOptions = {
   cursorCmdTimeoutMs?: number;
   /** Optional path to detectors JSON overrides */
   detectorsPath?: string;
+  /** Whether to print verbose events to console */
+  verboseEvents?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -77,10 +79,12 @@ export class Orchestrator {
   private repeatedCount = 0;
   private stopTimer: NodeJS.Timeout | undefined;
   private consecutiveIdle = 0;
+  private readonly verboseEvents: boolean;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
     this.options = options;
+    this.verboseEvents = Boolean(options.verboseEvents);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -191,13 +195,17 @@ export class Orchestrator {
       const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
 
       this.process.onData(async (chunk) => {
+        // Always mirror raw output to stdout (already done in CursorProcess), but ensure it's visible
+        process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
         const event: OrchestratorEvent = { type: eventType } as OrchestratorEvent;
-        // eslint-disable-next-line no-console
-        console.log('[CursorPilot] event:', event.type);
+        if (this.verboseEvents) {
+          // eslint-disable-next-line no-console
+          console.log('[CursorPilot] event:', event.type);
+        }
         this.transcript?.write({ ts: Date.now(), type: event.type });
 
         if (event.type === 'idle') {
@@ -293,6 +301,9 @@ export class Orchestrator {
             if (!isInteractive) {
               const cursorCmd = `${cursorBinary} ${cargs}`;
               const { exitCode, stdout, stderr } = await runShellCommand({ cmd: cursorCmd, cwd });
+              // Mirror command output
+              if (stdout) process.stdout.write(stdout);
+              if (stderr) process.stderr.write(stderr);
               this.transcript?.write({
                 ts: Date.now(),
                 type: 'cursor-run',
@@ -338,12 +349,20 @@ export class Orchestrator {
               // eslint-disable-next-line no-await-in-loop
               await new Promise((r) => setTimeout(r, 200));
               if (/unknown option|not found/i.test(lastChunk)) {
+                if (this.verboseEvents) {
+                  // eslint-disable-next-line no-console
+                  console.log('[CursorPilot] event:', 'cursor-error');
+                }
                 this.transcript?.write({ ts: Date.now(), type: 'cursor-error', chunk: lastChunk });
                 await this.stop();
                 return;
               }
             }
             if (!completed) {
+              if (this.verboseEvents) {
+                // eslint-disable-next-line no-console
+                console.log('[CursorPilot] event:', 'cursor-timeout');
+              }
               this.transcript?.write({ ts: Date.now(), type: 'cursor-timeout', chunk: cargs });
               await this.stop();
               return;

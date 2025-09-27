@@ -9,6 +9,13 @@ export type DetectorPatterns = {
   completion?: RegExp[];
 };
 
+function withMultiline(patterns: RegExp[]): RegExp[] {
+  return patterns.map((re) => {
+    const flags = re.flags.includes('m') ? re.flags : `${re.flags}m`;
+    return new RegExp(re.source, flags);
+  });
+}
+
 /**
  * Streaming classifier using regex patterns with a simple idle debounce.
  * Accumulates output and emits coarse-grained events for the orchestrator.
@@ -25,10 +32,15 @@ export class CursorDetectors {
     patterns = {} as DetectorPatterns,
   }: { idleThresholdMs?: number; patterns?: DetectorPatterns } = {}) {
     this.idleThresholdMs = idleThresholdMs;
-    this.patterns = {
+    const base = {
       question: patterns.question ?? defaultDetectorPatterns.question,
       awaitingInput: patterns.awaitingInput ?? defaultDetectorPatterns.awaitingInput,
       completion: patterns.completion ?? defaultDetectorPatterns.completion,
+    };
+    this.patterns = {
+      question: withMultiline(base.question),
+      awaitingInput: withMultiline(base.awaitingInput),
+      completion: withMultiline(base.completion),
     };
   }
 
@@ -38,6 +50,7 @@ export class CursorDetectors {
     const now = Date.now();
     const idle = now - this.lastEmitAt > this.idleThresholdMs;
 
+    // Completion wins
     for (const re of this.patterns.completion) {
       if (re.test(this.buffer)) {
         this.lastEmitAt = now;
@@ -45,19 +58,22 @@ export class CursorDetectors {
       }
     }
 
+    // Prompt types should emit immediately when recognized
+    for (const re of this.patterns.question) {
+      if (re.test(this.buffer)) {
+        this.lastEmitAt = now;
+        return 'question';
+      }
+    }
+    for (const re of this.patterns.awaitingInput) {
+      if (re.test(this.buffer)) {
+        this.lastEmitAt = now;
+        return 'awaitingInput';
+      }
+    }
+
+    // Fallback: emit idle if we've seen nothing new for a while
     if (idle) {
-      for (const re of this.patterns.question) {
-        if (re.test(this.buffer)) {
-          this.lastEmitAt = now;
-          return 'question';
-        }
-      }
-      for (const re of this.patterns.awaitingInput) {
-        if (re.test(this.buffer)) {
-          this.lastEmitAt = now;
-          return 'awaitingInput';
-        }
-      }
       this.lastEmitAt = now;
       return 'idle';
     }

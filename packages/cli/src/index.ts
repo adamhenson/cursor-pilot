@@ -29,6 +29,11 @@ const envCursorCmdTimeoutMs = process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS
   ? Number(process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS)
   : 20000;
 const envDetectorsPath = process.env.CURSORPILOT_DETECTORS;
+const envVerboseEvents = Boolean(
+  process.env.CURSORPILOT_VERBOSE_EVENTS &&
+    process.env.CURSORPILOT_VERBOSE_EVENTS !== '0' &&
+    process.env.CURSORPILOT_VERBOSE_EVENTS.toLowerCase() !== 'false'
+);
 
 const program = new Command();
 program
@@ -74,6 +79,7 @@ program
     (v) => Number(v),
     envCursorCmdTimeoutMs
   )
+  .option('--verbose-events', 'Print event types to stdout', envVerboseEvents)
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -94,6 +100,7 @@ program
       echoAnswers?: boolean;
       cursorCmdTimeoutMs?: number;
       detectors?: string;
+      verboseEvents?: boolean;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -112,6 +119,7 @@ program
         echoAnswers: opts.echoAnswers,
         cursorCmdTimeoutMs: opts.cursorCmdTimeoutMs,
         detectorsPath: opts.detectors,
+        verboseEvents: opts.verboseEvents,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }

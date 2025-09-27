@@ -68,17 +68,16 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 
 ---
 
-## Phase 4 — LLM Provider Adapter (OpenAI first)
+## Phase 4 — LLM Provider Adapter (OpenAI)
 - Objectives
-  - Pluggable provider interface with OpenAI implementation.
+  - Real OpenAI SDK integration.
 - Deliverables
-  - `@cursor-pilot/core/llm/Provider.ts` interface.
-  - `OpenAIProvider.ts` with retries/backoff and token budgeting stub.
+  - `OpenAIProvider.ts` wired to Responses/Chat APIs, env-driven model.
   - `MockProvider.ts` for tests.
 - Acceptance
   - Integration test: orchestrator calls provider; mock returns answer.
 - Risks
-  - API limits and latency; include exponential backoff.
+  - API limits and latency; include exponential backoff (future polish).
 
 ---
 
@@ -101,7 +100,7 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 - Deliverables
   - CLI flags per design (`--prompt`, `--plan`, `--cursor`, `--cwd`, `--provider`, `--model`, `--dry-run`, `--max-steps`, `--timeout`, `--log`).
   - `plan.yml` schema parser and executor (sequential steps → Cursor commands).
-  - JSON overrides for detectors (`detectors.json`).
+  - JSON overrides for detectors (`--detectors` / `CURSORPILOT_DETECTORS`).
 - Acceptance
   - `cursor-pilot run --prompt ./x.md --plan ./plan.yml --dry-run` prints intended actions.
 - Risks
@@ -128,10 +127,9 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
   - Build robust unit and integration tests; golden transcripts.
 - Deliverables
   - Unit tests: detectors, context builder, provider adapters.
-  - Mock Cursor binary for scripted prompts; E2E tests (dry-run and typing-enabled).
-  - Golden transcript snapshots and diffing on PRs.
+  - Mock Cursor agent script and plan; E2E runs via CLI.
 - Acceptance
-  - `npm test` green across packages; coverage thresholds documented.
+  - `npm test` green across packages; integration run passes in CI.
 - Risks
   - PTY timing flakiness; use timeouts and deterministic mock outputs.
 
@@ -155,7 +153,7 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 - Objectives
   - Versioned detector profiles; JSON overrides; environment loading.
 - Deliverables
-  - `detectors/builtin.ts` with version tags; merge strategy with user overrides.
+  - Profiles with version tags; merge strategy with user overrides.
   - Config discovery order and validation errors.
 - Acceptance
   - Swapping profiles meaningfully changes detection behavior in tests.
@@ -174,14 +172,13 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
 
 ---
 
-## Phase 12 — Extensibility: Providers & Detectors
+## Phase 12 — Extensibility: Providers & Detectors (Trimmed)
 - Objectives
-  - Add additional providers and detector enhancements.
+  - Detector enhancements only (provider expansion out of scope).
 - Deliverables
-  - `AnthropicProvider.ts`, provider selection via flags.
   - Detectors enhancers; optional light classifier hook.
 - Acceptance
-  - Provider swap works via flags and env vars; detectors can be extended.
+  - Detectors can be extended and tuned via JSON overrides or pluggable hook.
 
 ---
 
@@ -190,19 +187,14 @@ This roadmap translates `docs/design.md` into concrete phases with clear objecti
   - Improve throughput, logging, metrics.
 - Deliverables
   - Token budgeting utilities; summarized history fallback.
-  - Structured logs with run IDs; basic metrics counters.
+  - Structured logs with run IDs.
 - Acceptance
   - Large sessions remain within token limits; logs are queryable.
 
 ---
 
 ## Phase 14 — Optional Web Dashboard (Post-MVP)
-- Objectives
-  - Live view of transcript and artifacts.
-- Deliverables
-  - Minimal web app streaming transcript via WebSocket.
-- Acceptance
-  - Observe a running session live; download artifacts afterward.
+- (De-scoped per discussion.)
 
 ---
 

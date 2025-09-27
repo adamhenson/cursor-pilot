@@ -12,6 +12,7 @@ These variables can be set in your shell or loaded via a local `.env` file.
 - `CURSORPILOT_AUTO_ANSWER_IDLE` (optional): If truthy, auto-type safe answers (y/n or numeric) on idle.
 - `CURSORPILOT_CURSOR_CMD_TIMEOUT_MS` (default: `20000`): Timeout for each cursor-agent command (ms).
 - `CURSORPILOT_DETECTORS` (optional): Path to detectors JSON overrides.
+- `CURSORPILOT_VERBOSE_EVENTS` (optional): If truthy, print event types to stdout.
 - `ECHO_ANSWERS` (optional): If truthy, echo typed answers to stdout.
 - `OPENAI_API_KEY` (required if provider is `openai`): API key for OpenAI.
 
@@ -27,6 +28,7 @@ CURSORPILOT_IDLE_MS=3000
 CURSORPILOT_AUTO_ANSWER_IDLE=true
 CURSORPILOT_CURSOR_CMD_TIMEOUT_MS=20000
 CURSORPILOT_DETECTORS=./detectors.json
+CURSORPILOT_VERBOSE_EVENTS=true
 ECHO_ANSWERS=true
 OPENAI_API_KEY=
 ```
