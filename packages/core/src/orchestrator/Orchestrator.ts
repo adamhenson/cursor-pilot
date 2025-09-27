@@ -239,15 +239,19 @@ export class Orchestrator {
         // Handle run confirmation prompts
         if (isApprovalPrompt) {
           if (this.autoApprovePrompts) {
-            if (this.approvalPhase === 'none') {
+            // Wait until options line is visible to press Enter
+            const hasOptions = /(Run\s*\(y\)\s*\(enter\))/i.test(chunk);
+            if (this.approvalPhase === 'none' && !hasOptions) {
+              this.approvalPhase = 'sentEnter';
+              // Small delay to allow options to render, then press Enter
+              await new Promise((r) => setTimeout(r, 150));
               if (this.options.echoAnswers) {
                 // eslint-disable-next-line no-console
                 console.log('[CursorPilot] typed: [enter]');
               }
               await this.process?.write('');
               this.transcript?.write({ ts: Date.now(), type: 'auto-approve-enter' });
-              this.approvalPhase = 'sentEnter';
-              // Fallback: if prompt still present after 700ms, send 'y'
+              // Fallback: if prompt persists after 900ms, send 'y'
               if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
               this.approvalFallbackTimer = setTimeout(async () => {
                 if (this.approvalPhase === 'sentEnter') {
@@ -259,7 +263,7 @@ export class Orchestrator {
                   this.transcript?.write({ ts: Date.now(), type: 'auto-approve-yes-fallback' });
                   this.approvalPhase = 'sentY';
                 }
-              }, 700);
+              }, 900);
               return;
             }
             if (this.approvalPhase === 'sentEnter') {
