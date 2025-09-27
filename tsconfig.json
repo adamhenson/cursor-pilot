@@ -1,5 +1,12 @@
 {
   "compilerOptions": {
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cursor-pilot/core": ["packages/core/src/index.ts"],
+      "@cursor-pilot/cli": ["packages/cli/src/index.ts"],
+      "@cursor-pilot/detectors": ["packages/detectors/src/index.ts"],
+      "@cursor-pilot/types": ["packages/types/src/index.ts"]
+    }
   }
 }

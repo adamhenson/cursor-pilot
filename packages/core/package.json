@@ -13,6 +13,7 @@
   "dependencies": {
     "@cursor-pilot/detectors": "0.0.0",
     "@cursor-pilot/types": "0.0.0",
+    "node-pty": "^1.0.0",
     "openai": "^5.23.1",
     "yaml": "^2.8.1"
   },
