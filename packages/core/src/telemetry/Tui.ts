@@ -1,3 +1,4 @@
+import { Terminal } from '@xterm/headless';
 import blessed from 'blessed';
 
 /** Minimal blessed-based TUI to show recent output and status with CR-aware rendering. */
@@ -5,10 +6,9 @@ export class Tui {
   private screen: blessed.Widgets.Screen;
   private logBox: blessed.Widgets.BoxElement;
   private statusBox: blessed.Widgets.BoxElement;
-  private lines: string[] = [];
-  private currentLine = '';
-  private maxLines = 400; // on-screen history
+  private term: Terminal;
   private renderScheduled = false;
+  private frameBuffer = '';
 
   public constructor() {
     this.screen = blessed.screen({ smartCSR: true, title: 'CursorPilot' });
@@ -35,26 +35,17 @@ export class Tui {
     });
     this.screen.key(['q', 'C-c'], () => this.destroy());
     this.screen.render();
+    this.term = new Terminal({ cols: 120, rows: 40 });
+    this.term.onData((data) => {
+      // Headless terminal emits input; ignore for now
+    });
   }
 
-  // Append a raw chunk; handle CR (\r) to rewrite current line instead of appending
   public append(chunk: string): void {
-    for (let i = 0; i < chunk.length; i += 1) {
-      const ch = chunk[i];
-      if (ch === '\r') {
-        // Reset current line for rewrite
-        this.currentLine = '';
-        continue;
-      }
-      if (ch === '\n') {
-        this.flushLine();
-        continue;
-      }
-      // Ignore other control characters
-      const code = ch.charCodeAt(0);
-      if (code < 32 && code !== 9) continue;
-      this.currentLine += ch;
-    }
+    // Write raw chunk directly to headless xterm, which interprets cursor movement/erase
+    this.term.write(chunk);
+    // Prepare frame text for blessed by reading terminal buffer lines
+    this.frameBuffer = this.getFrame();
     this.scheduleRender();
   }
 
@@ -67,12 +58,19 @@ export class Tui {
     this.screen.destroy();
   }
 
-  private flushLine(): void {
-    if (this.currentLine.length > 0 || this.lines.length === 0) {
-      this.lines.push(this.currentLine);
-      if (this.lines.length > this.maxLines) this.lines.shift();
+  private getFrame(): string {
+    const lines: string[] = [];
+    const buffer = this.term.buffer.active;
+    const rows = buffer.length;
+    for (let y = 0; y < rows; y += 1) {
+      const line = buffer.getLine(y);
+      if (!line) {
+        lines.push('');
+        continue;
+      }
+      lines.push(line.translateToString());
     }
-    this.currentLine = '';
+    return lines.join('\n');
   }
 
   private scheduleRender(): void {
@@ -80,8 +78,7 @@ export class Tui {
     this.renderScheduled = true;
     setTimeout(() => {
       this.renderScheduled = false;
-      const content = [...this.lines, this.currentLine].join('\n');
-      this.logBox.setContent(content);
+      this.logBox.setContent(this.frameBuffer);
       this.screen.render();
     }, 50);
   }
