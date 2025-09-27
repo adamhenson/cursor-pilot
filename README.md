@@ -143,6 +143,9 @@ node packages/cli/dist/index.js run \
 - **Echo answers**: Show what CursorPilot types back to the agent.
   - CLI: `--echo-answers`
   - Env: `ECHO_ANSWERS=true`
+- **LLM logging**: Persist full LLM prompts and responses into the transcript (JSONL).
+  - CLI: `--log-llm`
+  - Env: `CURSORPILOT_LOG_LLM=true`
 
 Example:
 ```bash
@@ -151,6 +154,7 @@ node packages/cli/dist/index.js run \
   --plan ./plan-mock.yml \
   --provider mock \
   --verbose-events \
+  --log-llm \
   --echo-answers \
   --idle-ms 1000 \
   --auto-answer-idle

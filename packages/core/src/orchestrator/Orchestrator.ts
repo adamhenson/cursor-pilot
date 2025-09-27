@@ -48,6 +48,8 @@ export type OrchestratorOptions = {
   detectorsPath?: string;
   /** Whether to print verbose events to console */
   verboseEvents?: boolean;
+  /** Whether to log prompts and responses to transcript */
+  logLlm?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -80,11 +82,14 @@ export class Orchestrator {
   private stopTimer: NodeJS.Timeout | undefined;
   private consecutiveIdle = 0;
   private readonly verboseEvents: boolean;
+  private readonly logLlm: boolean;
+  private trustedWorkspace = false;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
     this.options = options;
     this.verboseEvents = Boolean(options.verboseEvents);
+    this.logLlm = Boolean(options.logLlm);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -96,6 +101,9 @@ export class Orchestrator {
     dryRun?: boolean;
   }): Promise<void> {
     const cwd = this.options.cwd ?? process.cwd();
+
+    // Resolve governing prompt text early so it's available across flows
+    const governingText = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
 
     const plan = this.options.planPath
       ? await loadPlan(
@@ -192,12 +200,39 @@ export class Orchestrator {
       await this.process.start([]);
 
       const system = baseSystemPrompt();
-      const governing = await resolveGoverningPrompt(this.options.governingPrompt, cwd);
 
       this.process.onData(async (chunk) => {
         // Always mirror raw output to stdout (already done in CursorProcess), but ensure it's visible
         process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
+
+        // Auto-accept workspace trust prompt if detected
+        if (
+          !this.trustedWorkspace &&
+          (/Workspace Trust Required/i.test(chunk) || /Trust this workspace/i.test(chunk))
+        ) {
+          this.trustedWorkspace = true;
+          if (this.options.echoAnswers) {
+            // eslint-disable-next-line no-console
+            console.log('[CursorPilot] typed: a');
+          }
+          await this.process?.write('a');
+          await new Promise((r) => setTimeout(r, 300));
+          await this.process?.write('');
+          this.transcript?.write({ ts: Date.now(), type: 'auto-trust' });
+          return;
+        }
+
+        // Auto-approve run confirmation prompts
+        if (/Run this command\?/i.test(chunk) || /Not in allowlist:/i.test(chunk)) {
+          if (this.options.echoAnswers) {
+            // eslint-disable-next-line no-console
+            console.log('[CursorPilot] typed: y');
+          }
+          await this.process?.write('y');
+          this.transcript?.write({ ts: Date.now(), type: 'auto-approve' });
+          return;
+        }
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
@@ -212,18 +247,34 @@ export class Orchestrator {
           this.consecutiveIdle += 1;
           if (this.consecutiveIdle >= 2) {
             const { userPrompt } = await buildContext({
-              governingPrompt: governing,
+              governingPrompt: governingText,
               recentOutput: chunk,
               cwd,
             });
+            if (this.logLlm) {
+              this.transcript?.write({
+                ts: Date.now(),
+                type: 'llm-prompt',
+                scope: 'idle',
+                system,
+                user: userPrompt,
+              });
+            }
             const { text } = await provider.complete({
               system,
               user: userPrompt,
-              maxTokens: 16,
+              maxTokens: 32,
               temperature: this.options.temperature ?? 0,
             });
+            if (this.logLlm) {
+              this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'idle', text });
+            }
             this.transcript?.write({ ts: Date.now(), type: 'idle-suggestion', answer: text });
-            if (this.options.autoAnswerIdle && (/^(y|n)$/i.test(text) || /^\d+$/.test(text))) {
+            if (this.options.autoAnswerIdle && text && text.trim().length > 0) {
+              if (this.options.echoAnswers) {
+                // eslint-disable-next-line no-console
+                console.log(`[CursorPilot] typed: ${text}`);
+              }
               await this.process?.write(text);
             }
           }
@@ -239,16 +290,28 @@ export class Orchestrator {
           }
 
           const { userPrompt } = await buildContext({
-            governingPrompt: governing,
+            governingPrompt: governingText,
             recentOutput: chunk,
             cwd,
           });
+          if (this.logLlm) {
+            this.transcript?.write({
+              ts: Date.now(),
+              type: 'llm-prompt',
+              scope: 'qa',
+              system,
+              user: userPrompt,
+            });
+          }
           const { text } = await provider.complete({
             system,
             user: userPrompt,
-            maxTokens: 16,
+            maxTokens: 200,
             temperature: this.options.temperature ?? 0,
           });
+          if (this.logLlm) {
+            this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'qa', text });
+          }
 
           const qaHash = `${event.type}|${text}`;
           if (this.lastQAHash === qaHash) {
@@ -278,6 +341,7 @@ export class Orchestrator {
 
     // Execute plan steps sequentially (basic version)
     if (plan?.steps?.length) {
+      let interactiveStarted = false;
       for (const step of plan.steps) {
         if (step.run?.length) {
           for (const cmd of step.run) {
@@ -321,54 +385,26 @@ export class Orchestrator {
               continue;
             }
             await this.process?.execCursor(parts);
-            const deadline = Date.now() + (this.options.cursorCmdTimeoutMs ?? 20000);
-            let completed = false;
-            let lastChunk = '';
-            let buffer = '';
-            const marker = '__CURSORPILOT_DONE__';
-            const promptRe = /\n[^\n]*\$\s?$/; // crude shell prompt heuristic
-            const onData = async (chunk: string) => {
-              lastChunk = chunk;
-              buffer += chunk;
-              if (buffer.length > 10_000) buffer = buffer.slice(-10_000);
-              if (buffer.includes(marker)) {
-                completed = true;
-                return;
-              }
-              const type = this.detectors?.ingestChunk(chunk);
-              if (type === 'completed') {
-                completed = true;
-                return;
-              }
-              if (promptRe.test(buffer)) {
-                completed = true;
-              }
-            };
-            this.process?.onData(onData);
-            while (Date.now() < deadline && !completed) {
-              // eslint-disable-next-line no-await-in-loop
-              await new Promise((r) => setTimeout(r, 200));
-              if (/unknown option|not found/i.test(lastChunk)) {
-                if (this.verboseEvents) {
-                  // eslint-disable-next-line no-console
-                  console.log('[CursorPilot] event:', 'cursor-error');
-                }
-                this.transcript?.write({ ts: Date.now(), type: 'cursor-error', chunk: lastChunk });
-                await this.stop();
-                return;
-              }
+            // Inject governing prompt once at startup to orient the agent
+            if (governingText && governingText.trim().length > 0) {
+              // eslint-disable-next-line no-console
+              if (this.options.echoAnswers) console.log('[CursorPilot] typed: [governing prompt]');
+              await new Promise((r) => setTimeout(r, 500));
+              await this.process?.write(governingText);
+              await new Promise((r) => setTimeout(r, 300));
+              await this.process?.write('');
+              this.transcript?.write({ ts: Date.now(), type: 'seed-prompt' });
             }
-            if (!completed) {
-              if (this.verboseEvents) {
-                // eslint-disable-next-line no-console
-                console.log('[CursorPilot] event:', 'cursor-timeout');
-              }
-              this.transcript?.write({ ts: Date.now(), type: 'cursor-timeout', chunk: cargs });
-              await this.stop();
-              return;
-            }
+            // Mark interactive session started; subsequent plan steps are skipped
+            interactiveStarted = true;
+            break;
           }
         }
+        if (interactiveStarted) break;
+      }
+      if (interactiveStarted) {
+        // Keep session open; interactive flow continues via onData handlers
+        return;
       }
       this.transcript?.write({ ts: Date.now(), type: 'plan-completed' });
       await this.stop();

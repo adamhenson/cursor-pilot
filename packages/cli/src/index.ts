@@ -34,6 +34,11 @@ const envVerboseEvents = Boolean(
     process.env.CURSORPILOT_VERBOSE_EVENTS !== '0' &&
     process.env.CURSORPILOT_VERBOSE_EVENTS.toLowerCase() !== 'false'
 );
+const envLogLLM = Boolean(
+  process.env.CURSORPILOT_LOG_LLM &&
+    process.env.CURSORPILOT_LOG_LLM !== '0' &&
+    process.env.CURSORPILOT_LOG_LLM.toLowerCase() !== 'false'
+);
 
 const program = new Command();
 program
@@ -58,6 +63,7 @@ program
   .option('--plan <path>', 'Path to plan.yml')
   .option('--log <dir>', 'Directory to write transcript logs', process.env.CURSORPILOT_LOG_DIR)
   .option('--detectors <path>', 'Path to detectors JSON overrides', envDetectorsPath)
+  .option('--log-llm', 'Log LLM prompts and responses to transcript', envLogLLM)
   .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
   .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
   .option(
@@ -101,6 +107,7 @@ program
       cursorCmdTimeoutMs?: number;
       detectors?: string;
       verboseEvents?: boolean;
+      logLlm?: boolean;
     }) => {
       const orchestrator = new Orchestrator({
         cwd: opts.cwd,
@@ -120,6 +127,7 @@ program
         cursorCmdTimeoutMs: opts.cursorCmdTimeoutMs,
         detectorsPath: opts.detectors,
         verboseEvents: opts.verboseEvents,
+        logLlm: opts.logLlm,
       } as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }

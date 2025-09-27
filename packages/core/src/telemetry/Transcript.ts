@@ -19,6 +19,14 @@ export type TranscriptRecord = {
   chunk?: string;
   /** Answer text, if any */
   answer?: string;
+  /** Optional scope label for disambiguation (e.g., 'idle', 'qa') */
+  scope?: string;
+  /** Optional LLM system prompt */
+  system?: string;
+  /** Optional LLM user prompt */
+  user?: string;
+  /** Optional LLM response text */
+  text?: string;
 };
 
 /** Lightweight JSONL transcript writer for session events and answers. */
