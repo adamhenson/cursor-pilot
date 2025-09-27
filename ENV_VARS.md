@@ -14,6 +14,8 @@ These variables can be set in your shell or loaded via a local `.env` file.
 - `CURSORPILOT_DETECTORS` (optional): Path to detectors JSON overrides.
 - `CURSORPILOT_VERBOSE_EVENTS` (optional): If truthy, print event types to stdout.
 - `CURSORPILOT_LOG_LLM` (optional): If truthy, log LLM prompts and responses to transcript.
+- `CURSORPILOT_AUTO_APPROVE` (optional): If truthy, auto-approve Cursor run prompts.
+- `CURSORPILOT_ECHO_GOVERNING` (optional): If truthy, echo governing prompt content to console.
 - `ECHO_ANSWERS` (optional): If truthy, echo typed answers to stdout.
 - `OPENAI_API_KEY` (required if provider is `openai`): API key for OpenAI.
 

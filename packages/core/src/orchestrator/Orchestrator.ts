@@ -52,6 +52,8 @@ export type OrchestratorOptions = {
   logLlm?: boolean;
   /** Whether to auto-approve run prompts without asking the LLM */
   autoApprovePrompts?: boolean;
+  /** Whether to echo governing prompt content when seeding */
+  echoGoverning?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -86,6 +88,7 @@ export class Orchestrator {
   private readonly verboseEvents: boolean;
   private readonly logLlm: boolean;
   private readonly autoApprovePrompts: boolean;
+  private readonly echoGoverning: boolean;
   private trustedWorkspace = false;
 
   /** Construct a new orchestrator with the provided options. */
@@ -94,6 +97,7 @@ export class Orchestrator {
     this.verboseEvents = Boolean(options.verboseEvents);
     this.logLlm = Boolean(options.logLlm);
     this.autoApprovePrompts = Boolean(options.autoApprovePrompts);
+    this.echoGoverning = Boolean(options.echoGoverning);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -438,7 +442,16 @@ export class Orchestrator {
               await this.process?.write(governingText);
               await new Promise((r) => setTimeout(r, 300));
               await this.process?.write('');
+              if (this.echoGoverning) {
+                // eslint-disable-next-line no-console
+                console.log('[CursorPilot] governing prompt:\n', governingText);
+              }
               this.transcript?.write({ ts: Date.now(), type: 'seed-prompt' });
+              this.transcript?.write({
+                ts: Date.now(),
+                type: 'seed-prompt-content',
+                chunk: governingText,
+              });
             }
             // Mark interactive session started; subsequent plan steps are skipped
             interactiveStarted = true;
