@@ -90,6 +90,7 @@ export class Orchestrator {
   private readonly autoApprovePrompts: boolean;
   private readonly echoGoverning: boolean;
   private seedNudgeTimer: NodeJS.Timeout | undefined;
+  private approvalPhase: 'none' | 'sentEnter' | 'sentY' = 'none';
   private trustedWorkspace = false;
 
   /** Construct a new orchestrator with the provided options. */
@@ -232,15 +233,32 @@ export class Orchestrator {
           return;
         }
 
+        const isApprovalPrompt =
+          /Run this command\?/i.test(chunk) || /Not in allowlist:/i.test(chunk);
         // Handle run confirmation prompts
-        if (/Run this command\?/i.test(chunk) || /Not in allowlist:/i.test(chunk)) {
+        if (isApprovalPrompt) {
           if (this.autoApprovePrompts) {
-            if (this.options.echoAnswers) {
-              // eslint-disable-next-line no-console
-              console.log('[CursorPilot] typed: y');
+            if (this.approvalPhase === 'none') {
+              if (this.options.echoAnswers) {
+                // eslint-disable-next-line no-console
+                console.log('[CursorPilot] typed: [enter]');
+              }
+              await this.process?.write('');
+              this.transcript?.write({ ts: Date.now(), type: 'auto-approve-enter' });
+              this.approvalPhase = 'sentEnter';
+              return;
             }
-            await this.process?.write('y');
-            this.transcript?.write({ ts: Date.now(), type: 'auto-approve' });
+            if (this.approvalPhase === 'sentEnter') {
+              if (this.options.echoAnswers) {
+                // eslint-disable-next-line no-console
+                console.log('[CursorPilot] typed: y');
+              }
+              await this.process?.write('y');
+              this.transcript?.write({ ts: Date.now(), type: 'auto-approve-yes' });
+              this.approvalPhase = 'sentY';
+              return;
+            }
+            // already sent Y; do nothing
             return;
           }
           // Otherwise, send to LLM as a question
@@ -283,6 +301,9 @@ export class Orchestrator {
             });
           }
         }
+
+        // Reset approval phase when prompt not present in this chunk
+        if (!isApprovalPrompt) this.approvalPhase = 'none';
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
