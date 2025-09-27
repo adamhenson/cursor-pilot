@@ -63,6 +63,11 @@ program
   .option('--plan <path>', 'Path to plan.yml')
   .option('--log <dir>', 'Directory to write transcript logs', process.env.CURSORPILOT_LOG_DIR)
   .option('--detectors <path>', 'Path to detectors JSON overrides', envDetectorsPath)
+  .option(
+    '--print-config',
+    'Print effective config before run',
+    Boolean(process.env.CURSORPILOT_PRINT_CONFIG)
+  )
   .option('--log-llm', 'Log LLM prompts and responses to transcript', envLogLLM)
   .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
   .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
@@ -108,8 +113,9 @@ program
       detectors?: string;
       verboseEvents?: boolean;
       logLlm?: boolean;
+      printConfig?: boolean;
     }) => {
-      const orchestrator = new Orchestrator({
+      const effective = {
         cwd: opts.cwd,
         cursorBinary: opts.cursor,
         provider: opts.provider,
@@ -128,7 +134,14 @@ program
         detectorsPath: opts.detectors,
         verboseEvents: opts.verboseEvents,
         logLlm: opts.logLlm,
-      } as any);
+      } as const;
+
+      if (opts.printConfig) {
+        // eslint-disable-next-line no-console
+        console.log('[CursorPilot] Effective config:', effective);
+      }
+
+      const orchestrator = new Orchestrator(effective as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }
   );
