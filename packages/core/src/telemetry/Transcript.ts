@@ -7,6 +7,8 @@ export type TranscriptOptions = {
   logDir: string;
   /** File name for the JSONL transcript (default: transcript.jsonl) */
   fileName?: string;
+  /** Optional max number of lines to retain; if set, keep only last N lines */
+  maxLines?: number;
 };
 
 /** Single JSONL record written to the transcript. */
@@ -35,12 +37,15 @@ export type TranscriptRecord = {
 export class Transcript {
   private readonly options: Required<TranscriptOptions>;
   private stream: ReturnType<typeof createWriteStream>;
+  private lineCount = 0;
+  private cache: string[] | undefined;
 
   /** Create or append to a JSONL transcript in the provided directory. */
   public constructor(options: TranscriptOptions) {
     const resolved: Required<TranscriptOptions> = {
       fileName: options.fileName ?? 'transcript.jsonl',
       logDir: options.logDir,
+      maxLines: options.maxLines ?? 0,
     };
     this.options = resolved;
     if (!existsSync(resolved.logDir)) {
@@ -48,16 +53,45 @@ export class Transcript {
     }
     const filePath = join(resolved.logDir, resolved.fileName);
     this.stream = createWriteStream(filePath, { flags: 'a' });
+    if (this.options.maxLines > 0) {
+      this.cache = [];
+    }
   }
 
   /** Append a record to the transcript as a single JSON line. */
   public write(record: TranscriptRecord): void {
     const line = JSON.stringify(record);
+    if (this.cache) {
+      this.cache.push(line);
+      if (this.cache.length > (this.options.maxLines || 0)) this.cache.shift();
+      this.lineCount += 1;
+      // Rewrite every 200 appends to reduce I/O
+      if (this.lineCount % 200 === 0) {
+        this.flush();
+      } else {
+        this.stream.write(`${line}\n`);
+      }
+      return;
+    }
     this.stream.write(`${line}\n`);
   }
 
   /** Close the underlying stream. */
   public close(): void {
+    this.flush();
     this.stream.end();
+  }
+
+  private flush(): void {
+    if (!this.cache) return;
+    const filePath = join(this.options.logDir, this.options.fileName);
+    // Close and rewrite last N lines
+    this.stream.end();
+    const data = `${this.cache.join('\n')}\n`;
+    this.stream = createWriteStream(filePath, { flags: 'w' });
+    this.stream.write(data);
+    // Reopen in append mode for subsequent writes
+    this.stream.end();
+    this.stream = createWriteStream(filePath, { flags: 'a' });
   }
 }

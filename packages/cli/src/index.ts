@@ -49,6 +49,14 @@ const envLogLLM = Boolean(
     process.env.CURSORPILOT_LOG_LLM !== '0' &&
     process.env.CURSORPILOT_LOG_LLM.toLowerCase() !== 'false'
 );
+const envTranscriptMaxLines = process.env.CURSORPILOT_TRANSCRIPT_MAX_LINES
+  ? Number(process.env.CURSORPILOT_TRANSCRIPT_MAX_LINES)
+  : undefined;
+const envTui = Boolean(
+  process.env.CURSORPILOT_TUI &&
+    process.env.CURSORPILOT_TUI !== '0' &&
+    process.env.CURSORPILOT_TUI.toLowerCase() !== 'false'
+);
 
 const program = new Command();
 program
@@ -79,6 +87,13 @@ program
     Boolean(process.env.CURSORPILOT_PRINT_CONFIG)
   )
   .option('--log-llm', 'Log LLM prompts and responses to transcript', envLogLLM)
+  .option(
+    '--transcript-max-lines <num>',
+    'Maximum number of lines to retain in transcript',
+    (v) => Number(v),
+    envTranscriptMaxLines
+  )
+  .option('--tui', 'Render compact TUI view instead of raw stream', envTui)
   .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
   .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
   .option(
@@ -128,6 +143,8 @@ program
       verboseEvents?: boolean;
       logLlm?: boolean;
       printConfig?: boolean;
+      transcriptMaxLines?: number;
+      tui?: boolean;
     }) => {
       const effective = {
         cwd: opts.cwd,
@@ -148,6 +165,8 @@ program
         detectorsPath: opts.detectors,
         verboseEvents: opts.verboseEvents,
         logLlm: opts.logLlm,
+        transcriptMaxLines: opts.transcriptMaxLines,
+        tui: opts.tui,
       } as const;
 
       if (opts.printConfig) {

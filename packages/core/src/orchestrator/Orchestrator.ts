@@ -54,6 +54,10 @@ export type OrchestratorOptions = {
   autoApprovePrompts?: boolean;
   /** Whether to echo governing prompt content when seeding */
   echoGoverning?: boolean;
+  /** Optional transcript cap for last N lines */
+  transcriptMaxLines?: number;
+  /** Whether to render compact TUI (suppresses raw stdout mirror) */
+  tui?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -93,6 +97,7 @@ export class Orchestrator {
   private approvalPhase: 'none' | 'sentEnter' | 'sentY' = 'none';
   private approvalFallbackTimer: NodeJS.Timeout | undefined;
   private trustedWorkspace = false;
+  private readonly useTui: boolean;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -101,6 +106,7 @@ export class Orchestrator {
     this.logLlm = Boolean(options.logLlm);
     this.autoApprovePrompts = Boolean(options.autoApprovePrompts);
     this.echoGoverning = Boolean(options.echoGoverning);
+    this.useTui = Boolean(options.tui);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -182,7 +188,7 @@ export class Orchestrator {
       patterns: patternsOverride,
     });
     this.transcript = this.options.logDir
-      ? new Transcript({ logDir: this.options.logDir })
+      ? new Transcript({ logDir: this.options.logDir, maxLines: this.options.transcriptMaxLines })
       : undefined;
 
     const cursorBinary = this.options.cursorBinary ?? 'cursor-agent';
@@ -213,8 +219,8 @@ export class Orchestrator {
       const system = baseSystemPrompt();
 
       this.process.onData(async (chunk) => {
-        // Always mirror raw output to stdout (already done in CursorProcess), but ensure it's visible
-        process.stdout.write('');
+        // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
+        if (!this.useTui) process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
 
         // Auto-accept workspace trust prompt if detected
