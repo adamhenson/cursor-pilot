@@ -91,6 +91,7 @@ export class Orchestrator {
   private readonly echoGoverning: boolean;
   private seedNudgeTimer: NodeJS.Timeout | undefined;
   private approvalPhase: 'none' | 'sentEnter' | 'sentY' = 'none';
+  private approvalFallbackTimer: NodeJS.Timeout | undefined;
   private trustedWorkspace = false;
 
   /** Construct a new orchestrator with the provided options. */
@@ -246,6 +247,19 @@ export class Orchestrator {
               await this.process?.write('');
               this.transcript?.write({ ts: Date.now(), type: 'auto-approve-enter' });
               this.approvalPhase = 'sentEnter';
+              // Fallback: if prompt still present after 700ms, send 'y'
+              if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
+              this.approvalFallbackTimer = setTimeout(async () => {
+                if (this.approvalPhase === 'sentEnter') {
+                  if (this.options.echoAnswers) {
+                    // eslint-disable-next-line no-console
+                    console.log('[CursorPilot] typed: y (fallback)');
+                  }
+                  await this.process?.write('y');
+                  this.transcript?.write({ ts: Date.now(), type: 'auto-approve-yes-fallback' });
+                  this.approvalPhase = 'sentY';
+                }
+              }, 700);
               return;
             }
             if (this.approvalPhase === 'sentEnter') {
@@ -303,7 +317,10 @@ export class Orchestrator {
         }
 
         // Reset approval phase when prompt not present in this chunk
-        if (!isApprovalPrompt) this.approvalPhase = 'none';
+        if (!isApprovalPrompt) {
+          this.approvalPhase = 'none';
+          if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
+        }
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
@@ -512,6 +529,7 @@ export class Orchestrator {
   public async stop(): Promise<void> {
     if (this.stopTimer) clearTimeout(this.stopTimer);
     if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
+    if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
     await this.process?.dispose();
     this.transcript?.close();
     this.process = undefined;
