@@ -60,6 +60,8 @@ export type OrchestratorOptions = {
   tui?: boolean;
   /** Whether to render compact buffered console output */
   compactConsole?: boolean;
+  /** Whether to print only important/highlight events to console */
+  importantOnly?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -104,6 +106,7 @@ export class Orchestrator {
   private readonly compactConsole: boolean = false;
   private compactBuffer = '';
   private compactTimer: NodeJS.Timeout | undefined;
+  private readonly importantOnly: boolean = false;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -114,6 +117,7 @@ export class Orchestrator {
     this.echoGoverning = Boolean(options.echoGoverning);
     this.useTui = Boolean(options.tui);
     this.compactConsole = Boolean(options.compactConsole);
+    this.importantOnly = Boolean(options.importantOnly);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -228,7 +232,7 @@ export class Orchestrator {
 
       this.process.onData(async (chunk) => {
         // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
-        if (!this.useTui && !this.compactConsole) process.stdout.write('');
+        if (!this.useTui && !this.compactConsole && !this.importantOnly) process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
         if (this.useTui) this.tui?.append(chunk);
         if (this.compactConsole && !this.useTui) {
@@ -236,11 +240,18 @@ export class Orchestrator {
           if (this.compactTimer) clearTimeout(this.compactTimer);
           this.compactTimer = setTimeout(() => {
             const frame = collapseAnsi(this.compactBuffer);
-            // Clear entire screen and move cursor home before rendering the new frame
-            process.stdout.write('\x1b[H\x1b[2J');
+            // Clear entire screen and move cursor home, clear scrollback
+            process.stdout.write('\x1b[H\x1b[3J\x1b[2J');
             process.stdout.write(frame);
             this.compactBuffer = '';
           }, 150);
+        }
+        if (this.importantOnly && !this.useTui) {
+          const highlight = extractHighlight(chunk);
+          if (highlight) {
+            // eslint-disable-next-line no-console
+            console.log(highlight);
+          }
         }
         // In TUI mode we mirror raw PTY output only (no overlay rendering)
 
@@ -355,7 +366,7 @@ export class Orchestrator {
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
-        if (this.verboseEvents && !this.useTui) {
+        if (this.verboseEvents && !this.useTui && !this.importantOnly) {
           // eslint-disable-next-line no-console
           console.log('[CursorPilot] event:', eventType);
         }
@@ -649,4 +660,24 @@ function collapseAnsi(input: string): string {
   }
   if (line.length > 0) out += `${line}`;
   return out;
+}
+
+function extractHighlight(input: string): string | undefined {
+  const s = stripAnsi(input);
+  // Cursor UI labels
+  const planMatch = s.match(/\b(Add a follow-up|Generating|Listed|Listing|Running|Reading)\b.*$/m);
+  if (planMatch) return `[Cursor] ${planMatch[0].trim()}`;
+  // Pasted text notices
+  const pasted = s.match(/Pasted text #\d+ \+\d+ lines/);
+  if (pasted) return `[Cursor] ${pasted[0]}`;
+  // Approvals
+  if (/Run this command\?/i.test(s)) return '[Cursor] Waiting for approval';
+  if (/Not in allowlist:/i.test(s)) return '[Cursor] Not in allowlist';
+  // Shell lines starting with $ commands
+  const cmd = s.match(/^\s*\$\s+.+$/m);
+  if (cmd) return cmd[0].trim();
+  // Errors
+  const err = s.match(/(error|failed|cannot|timeout)/i);
+  if (err) return s.trim().slice(0, 200);
+  return undefined;
 }

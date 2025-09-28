@@ -40,7 +40,7 @@ export class Tui {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const XHeadless = require('@xterm/headless');
     const TerminalCtor = XHeadless.Terminal || XHeadless.default?.Terminal || XHeadless;
-    this.term = new TerminalCtor({ cols: 120, rows: 40, allowProposedApi: true });
+    this.term = new TerminalCtor({ cols: 160, rows: 40, allowProposedApi: true });
     this.term.onData((data: string) => {
       // Headless terminal emits input; ignore for now
     });

@@ -62,6 +62,11 @@ const envCompactConsole = Boolean(
     process.env.CURSORPILOT_COMPACT_CONSOLE !== '0' &&
     process.env.CURSORPILOT_COMPACT_CONSOLE.toLowerCase() !== 'false'
 );
+const envImportantOnly = Boolean(
+  process.env.CURSORPILOT_IMPORTANT_ONLY &&
+    process.env.CURSORPILOT_IMPORTANT_ONLY !== '0' &&
+    process.env.CURSORPILOT_IMPORTANT_ONLY.toLowerCase() !== 'false'
+);
 
 const program = new Command();
 program
@@ -100,6 +105,7 @@ program
   )
   .option('--tui', 'Render compact TUI view instead of raw stream', envTui)
   .option('--compact-console', 'Atomic buffered console rendering', envCompactConsole)
+  .option('--important-only', 'Print condensed highlights instead of raw stream', envImportantOnly)
   .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
   .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
   .option(
@@ -152,6 +158,7 @@ program
       transcriptMaxLines?: number;
       tui?: boolean;
       compactConsole?: boolean;
+      importantOnly?: boolean;
     }) => {
       const effective = {
         cwd: opts.cwd,
@@ -177,6 +184,7 @@ program
         autoApprovePrompts: opts.autoApprove,
         echoGoverning: opts.echoGoverning,
         compactConsole: opts.compactConsole,
+        importantOnly: opts.importantOnly,
       } as const;
 
       if (opts.printConfig) {
