@@ -66,14 +66,13 @@ export class Tui {
   private getFrame(): string {
     const lines: string[] = [];
     const buffer = this.term.buffer.active;
-    const rows = buffer.length;
-    for (let y = 0; y < rows; y += 1) {
+    const viewportTop = buffer.viewportY ?? 0;
+    const rows = this.term.rows ?? 40;
+    const end = Math.min(buffer.length, viewportTop + rows);
+    const start = Math.max(0, end - rows);
+    for (let y = start; y < end; y += 1) {
       const line = buffer.getLine(y);
-      if (!line) {
-        lines.push('');
-        continue;
-      }
-      lines.push(line.translateToString());
+      lines.push(line ? line.translateToString() : '');
     }
     return lines.join('\n');
   }
