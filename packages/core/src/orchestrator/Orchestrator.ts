@@ -16,7 +16,7 @@ import { runShellCommand } from '../executors/ShellExecutor.js';
 import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
-import { Transcript } from '../telemetry/Transcript.js';
+import { MarkdownTranscript } from '../telemetry/MarkdownTranscript.js';
 import { Tui } from '../telemetry/Tui.js';
 
 /** Options that configure the orchestrator runtime behavior. */
@@ -94,7 +94,7 @@ export class Orchestrator {
   private readonly options: OrchestratorOptions;
   private process?: CursorProcess;
   private detectors: CursorDetectors | undefined;
-  private transcript: Transcript | undefined;
+  private transcript: MarkdownTranscript | undefined;
   private answersTyped = 0;
   private lastQAHash: string | undefined;
   private repeatedCount = 0;
@@ -209,7 +209,7 @@ export class Orchestrator {
       patterns: patternsOverride,
     });
     this.transcript = this.options.logDir
-      ? new Transcript({ logDir: this.options.logDir, maxLines: this.options.transcriptMaxLines })
+      ? new MarkdownTranscript({ logDir: this.options.logDir })
       : undefined;
     if (this.useTui) this.tui = new Tui();
 
@@ -219,13 +219,14 @@ export class Orchestrator {
       const msg = `Cursor binary not found on PATH: ${cursorBinary}. Install it or pass --cursor.`;
       // eslint-disable-next-line no-console
       console.error(`[CursorPilot] ${msg}`);
-      this.transcript?.write({ ts: Date.now(), type: 'cursor-not-found', chunk: msg });
+      this.transcript?.heading('Cursor binary not found');
+      this.transcript?.note(msg);
       return;
     }
 
     if (this.options.timeoutMs && this.options.timeoutMs > 0) {
       this.stopTimer = setTimeout(async () => {
-        this.transcript?.write({ ts: Date.now(), type: 'timeout' });
+        this.transcript?.note('Run timed out');
         await this.stop();
       }, this.options.timeoutMs);
     }
@@ -272,7 +273,7 @@ export class Orchestrator {
         if (!this.useTui && !this.compactConsole && !this.importantOnly) {
           process.stdout.write(chunk);
         }
-        this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
+        // We no longer store raw stdout lines in transcript
         if (this.useTui) this.tui?.append(chunk);
         if (this.compactConsole && !this.useTui) {
           // Write raw chunk to hidden xterm to interpret CR/ANSI correctly
@@ -310,14 +311,10 @@ export class Orchestrator {
           (/Workspace Trust Required/i.test(chunk) || /Trust this workspace/i.test(chunk))
         ) {
           this.trustedWorkspace = true;
-          if (this.options.echoAnswers) {
-            // eslint-disable-next-line no-console
-            console.log('[CursorPilot] typed: a');
-          }
           await this.process?.write('a');
           await new Promise((r) => setTimeout(r, 300));
           await this.process?.write('');
-          this.transcript?.write({ ts: Date.now(), type: 'auto-trust' });
+          this.transcript?.note('Auto-trusted workspace');
           return;
         }
 
@@ -332,34 +329,22 @@ export class Orchestrator {
               this.approvalPhase = 'sentEnter';
               // Small delay to allow options to render, then press Enter
               await new Promise((r) => setTimeout(r, 150));
-              if (this.options.echoAnswers) {
-                // eslint-disable-next-line no-console
-                console.log('[CursorPilot] typed: [enter]');
-              }
               await this.process?.write('');
-              this.transcript?.write({ ts: Date.now(), type: 'auto-approve-enter' });
+              this.transcript?.cursorHighlight('Auto-approve: pressed Enter');
               // Fallback: if prompt persists after 900ms, send 'y'
               if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
               this.approvalFallbackTimer = setTimeout(async () => {
                 if (this.approvalPhase === 'sentEnter') {
-                  if (this.options.echoAnswers) {
-                    // eslint-disable-next-line no-console
-                    console.log('[CursorPilot] typed: y (fallback)');
-                  }
                   await this.process?.write('y');
-                  this.transcript?.write({ ts: Date.now(), type: 'auto-approve-yes-fallback' });
+                  this.transcript?.cursorHighlight('Auto-approve fallback: typed y');
                   this.approvalPhase = 'sentY';
                 }
               }, 900);
               return;
             }
             if (this.approvalPhase === 'sentEnter') {
-              if (this.options.echoAnswers) {
-                // eslint-disable-next-line no-console
-                console.log('[CursorPilot] typed: y');
-              }
               await this.process?.write('y');
-              this.transcript?.write({ ts: Date.now(), type: 'auto-approve-yes' });
+              this.transcript?.cursorHighlight('Auto-approve: typed y');
               this.approvalPhase = 'sentY';
               return;
             }
@@ -372,15 +357,7 @@ export class Orchestrator {
             recentOutput: chunk,
             cwd,
           });
-          if (this.logLlm) {
-            this.transcript?.write({
-              ts: Date.now(),
-              type: 'llm-prompt',
-              scope: 'qa',
-              system,
-              user: userPrompt,
-            });
-          }
+          this.transcript?.llmExchange({ system, user: userPrompt, response: '' });
           try {
             const { text } = await provider.complete({
               system,
@@ -388,22 +365,11 @@ export class Orchestrator {
               maxTokens: 16,
               temperature: this.options.temperature ?? 0,
             });
-            if (this.logLlm) {
-              this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'qa', text });
-            }
-            this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
-            if (this.options.echoAnswers) {
-              // eslint-disable-next-line no-console
-              console.log('[CursorPilot] typed:', text);
-            }
+            this.transcript?.llmExchange({ system, user: userPrompt, response: text });
             await this.process?.write(text);
             return;
           } catch (err: any) {
-            this.transcript?.write({
-              ts: Date.now(),
-              type: 'llm-error',
-              error: String(err?.message ?? err),
-            });
+            this.transcript?.note(`LLM error: ${String(err?.message ?? err)}`);
           }
         }
 
@@ -415,11 +381,7 @@ export class Orchestrator {
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
-        if (this.verboseEvents && !this.useTui && !this.importantOnly && !this.compactConsole) {
-          // eslint-disable-next-line no-console
-          console.log('[CursorPilot] event:', eventType);
-        }
-        this.transcript?.write({ ts: Date.now(), type: eventType });
+        // Event markers omitted from transcript
 
         if (eventType === 'idle') {
           this.consecutiveIdle += 1;
@@ -429,30 +391,14 @@ export class Orchestrator {
               recentOutput: chunk,
               cwd,
             });
-            if (this.logLlm) {
-              this.transcript?.write({
-                ts: Date.now(),
-                type: 'llm-prompt',
-                scope: 'idle',
-                system,
-                user: userPrompt,
-              });
-            }
             const { text } = await provider.complete({
               system,
               user: userPrompt,
               maxTokens: 32,
               temperature: this.options.temperature ?? 0,
             });
-            if (this.logLlm) {
-              this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'idle', text });
-            }
-            this.transcript?.write({ ts: Date.now(), type: 'idle-suggestion', answer: text });
+            this.transcript?.llmExchange({ system, user: userPrompt, response: text });
             if (this.options.autoAnswerIdle && text && text.trim().length > 0) {
-              if (this.options.echoAnswers) {
-                // eslint-disable-next-line no-console
-                console.log(`[CursorPilot] typed: ${text}`);
-              }
               await this.process?.write(text);
             }
           }
@@ -462,7 +408,7 @@ export class Orchestrator {
 
         if (eventType === 'question' || eventType === 'awaitingInput') {
           if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
-            this.transcript?.write({ ts: Date.now(), type: 'max-steps-reached' });
+            this.transcript?.note('Max steps reached');
             await this.stop();
             return;
           }
@@ -472,30 +418,19 @@ export class Orchestrator {
             recentOutput: chunk,
             cwd,
           });
-          if (this.logLlm) {
-            this.transcript?.write({
-              ts: Date.now(),
-              type: 'llm-prompt',
-              scope: 'qa',
-              system,
-              user: userPrompt,
-            });
-          }
           const { text } = await provider.complete({
             system,
             user: userPrompt,
             maxTokens: 200,
             temperature: this.options.temperature ?? 0,
           });
-          if (this.logLlm) {
-            this.transcript?.write({ ts: Date.now(), type: 'llm-response', scope: 'qa', text });
-          }
+          this.transcript?.llmExchange({ system, user: userPrompt, response: text });
 
           const qaHash = `${eventType}|${text}`;
           if (this.lastQAHash === qaHash) {
             this.repeatedCount += 1;
             if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
-              this.transcript?.write({ ts: Date.now(), type: 'loop-breaker', answer: text });
+              this.transcript?.note('Loop breaker triggered');
               await this.stop();
               return;
             }
@@ -504,13 +439,7 @@ export class Orchestrator {
             this.repeatedCount = 0;
           }
 
-          this.transcript?.write({ ts: Date.now(), type: 'answer', answer: text });
-          // eslint-disable-next-line no-console
-          console.log('[CursorPilot] answer:', text);
-          if (this.options.echoAnswers) {
-            // eslint-disable-next-line no-console
-            console.log(`[CursorPilot] typed: ${text}`);
-          }
+          // Mirror output only; no extra logging
           await this.process?.write(text);
           this.answersTyped += 1;
         }
@@ -524,13 +453,9 @@ export class Orchestrator {
         if (step.run?.length) {
           for (const cmd of step.run) {
             const { exitCode, stdout, stderr } = await runShellCommand({ cmd, cwd });
-            this.transcript?.write({
-              ts: Date.now(),
-              type: 'run',
-              chunk: `$ ${cmd}\n${stdout}${stderr}`,
-            });
+            this.transcript?.cursorHighlight(`$ ${cmd}`);
             if (exitCode !== 0) {
-              this.transcript?.write({ ts: Date.now(), type: 'run-error', chunk: cmd });
+              this.transcript?.note(`Run error: ${cmd}`);
               await this.stop();
               return;
             }
@@ -546,17 +471,9 @@ export class Orchestrator {
               // Mirror command output
               if (stdout) process.stdout.write(stdout);
               if (stderr) process.stderr.write(stderr);
-              this.transcript?.write({
-                ts: Date.now(),
-                type: 'cursor-run',
-                chunk: `$ ${cursorCmd}\n${stdout}${stderr}`,
-              });
+              this.transcript?.cursorHighlight(`$ ${cursorCmd}`);
               if (exitCode !== 0) {
-                this.transcript?.write({
-                  ts: Date.now(),
-                  type: 'cursor-error',
-                  chunk: stderr || String(exitCode),
-                });
+                this.transcript?.note(`Cursor error: ${stderr || String(exitCode)}`);
                 await this.stop();
                 return;
               }
@@ -575,12 +492,7 @@ export class Orchestrator {
                 // eslint-disable-next-line no-console
                 console.log('[CursorPilot] governing prompt:\n', governingText);
               }
-              this.transcript?.write({ ts: Date.now(), type: 'seed-prompt' });
-              this.transcript?.write({
-                ts: Date.now(),
-                type: 'seed-prompt-content',
-                chunk: governingText,
-              });
+              this.transcript?.seedPrompt(governingText);
               // After seeding, if still idle after 3s, send a small nudge
               if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
               this.seedNudgeTimer = setTimeout(async () => {
@@ -595,7 +507,7 @@ export class Orchestrator {
                   console.log('[CursorPilot] typed: Auto');
                 }
                 await this.process?.write('Auto');
-                this.transcript?.write({ ts: Date.now(), type: 'nudge' });
+                this.transcript?.note('Sent idle nudge');
               }, 3000);
             }
             // Mark interactive session started; subsequent plan steps are skipped
@@ -609,7 +521,7 @@ export class Orchestrator {
         // Keep session open; interactive flow continues via onData handlers
         return;
       }
-      this.transcript?.write({ ts: Date.now(), type: 'plan-completed' });
+      this.transcript?.note('Plan completed');
       await this.stop();
       return;
     }

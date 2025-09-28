@@ -20,53 +20,19 @@ const envAutoAnswerIdle = Boolean(
     process.env.CURSORPILOT_AUTO_ANSWER_IDLE !== '0' &&
     process.env.CURSORPILOT_AUTO_ANSWER_IDLE.toLowerCase() !== 'false'
 );
-const envEchoAnswers = Boolean(
-  process.env.ECHO_ANSWERS &&
-    process.env.ECHO_ANSWERS !== '0' &&
-    process.env.ECHO_ANSWERS.toLowerCase() !== 'false'
-);
+// echo answers removed; we no longer print agent keystrokes
 const envCursorCmdTimeoutMs = process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS
   ? Number(process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS)
   : 20000;
 const envDetectorsPath = process.env.CURSORPILOT_DETECTORS;
-const envVerboseEvents = Boolean(
-  process.env.CURSORPILOT_VERBOSE_EVENTS &&
-    process.env.CURSORPILOT_VERBOSE_EVENTS !== '0' &&
-    process.env.CURSORPILOT_VERBOSE_EVENTS.toLowerCase() !== 'false'
-);
+// verbose events removed; always quiet
 const envAutoApprove = Boolean(
   process.env.CURSORPILOT_AUTO_APPROVE &&
     process.env.CURSORPILOT_AUTO_APPROVE !== '0' &&
     process.env.CURSORPILOT_AUTO_APPROVE.toLowerCase() !== 'false'
 );
-const envEchoGoverning = Boolean(
-  process.env.CURSORPILOT_ECHO_GOVERNING &&
-    process.env.CURSORPILOT_ECHO_GOVERNING !== '0' &&
-    process.env.CURSORPILOT_ECHO_GOVERNING.toLowerCase() !== 'false'
-);
-const envLogLLM = Boolean(
-  process.env.CURSORPILOT_LOG_LLM &&
-    process.env.CURSORPILOT_LOG_LLM !== '0' &&
-    process.env.CURSORPILOT_LOG_LLM.toLowerCase() !== 'false'
-);
-const envTranscriptMaxLines = process.env.CURSORPILOT_TRANSCRIPT_MAX_LINES
-  ? Number(process.env.CURSORPILOT_TRANSCRIPT_MAX_LINES)
-  : undefined;
-const envTui = Boolean(
-  process.env.CURSORPILOT_TUI &&
-    process.env.CURSORPILOT_TUI !== '0' &&
-    process.env.CURSORPILOT_TUI.toLowerCase() !== 'false'
-);
-const envCompactConsole = Boolean(
-  process.env.CURSORPILOT_COMPACT_CONSOLE &&
-    process.env.CURSORPILOT_COMPACT_CONSOLE !== '0' &&
-    process.env.CURSORPILOT_COMPACT_CONSOLE.toLowerCase() !== 'false'
-);
-const envImportantOnly = Boolean(
-  process.env.CURSORPILOT_IMPORTANT_ONLY &&
-    process.env.CURSORPILOT_IMPORTANT_ONLY !== '0' &&
-    process.env.CURSORPILOT_IMPORTANT_ONLY.toLowerCase() !== 'false'
-);
+// llm/log echo flags removed; handled by markdown transcript
+// tui/compact/highlights removed; raw mirroring only
 
 const program = new Command();
 program
@@ -96,16 +62,7 @@ program
     'Print effective config before run',
     Boolean(process.env.CURSORPILOT_PRINT_CONFIG)
   )
-  .option('--log-llm', 'Log LLM prompts and responses to transcript', envLogLLM)
-  .option(
-    '--transcript-max-lines <num>',
-    'Maximum number of lines to retain in transcript',
-    (v) => Number(v),
-    envTranscriptMaxLines
-  )
-  .option('--tui', 'Render compact TUI view instead of raw stream', envTui)
-  .option('--compact-console', 'Atomic buffered console rendering', envCompactConsole)
-  .option('--important-only', 'Print condensed highlights instead of raw stream', envImportantOnly)
+  // simplified: no special renderers or jsonl caps
   .option('--timeout-ms <num>', 'Maximum run time in milliseconds', (v) => Number(v), envTimeout)
   .option('--max-steps <num>', 'Maximum number of answers to type', (v) => Number(v), envMaxSteps)
   .option(
@@ -120,16 +77,15 @@ program
     'Automatically type safe answers on idle (y/n or numeric)',
     envAutoAnswerIdle
   )
-  .option('--echo-answers', 'Echo typed answers to stdout', envEchoAnswers)
   .option('--auto-approve', 'Auto-approve Cursor run prompts', envAutoApprove)
-  .option('--echo-governing', 'Echo governing prompt content to console', envEchoGoverning)
+  // no echo-governing
   .option(
     '--cursor-cmd-timeout-ms <num>',
     'Timeout for each cursor-agent command (ms)',
     (v) => Number(v),
     envCursorCmdTimeoutMs
   )
-  .option('--verbose-events', 'Print event types to stdout', envVerboseEvents)
+  // no verbose event printing
   .allowExcessArguments(false)
   .action(
     async (opts: {
@@ -147,18 +103,11 @@ program
       loopBreaker?: number;
       idleMs?: number;
       autoAnswerIdle?: boolean;
-      echoAnswers?: boolean;
       autoApprove?: boolean;
-      echoGoverning?: boolean;
       cursorCmdTimeoutMs?: number;
       detectors?: string;
-      verboseEvents?: boolean;
-      logLlm?: boolean;
       printConfig?: boolean;
-      transcriptMaxLines?: number;
-      tui?: boolean;
-      compactConsole?: boolean;
-      importantOnly?: boolean;
+      // simplified args only
     }) => {
       const effective = {
         cwd: opts.cwd,
@@ -174,17 +123,10 @@ program
         loopBreaker: opts.loopBreaker,
         idleMs: opts.idleMs,
         autoAnswerIdle: opts.autoAnswerIdle,
-        echoAnswers: opts.echoAnswers,
         cursorCmdTimeoutMs: opts.cursorCmdTimeoutMs,
         detectorsPath: opts.detectors,
-        verboseEvents: opts.verboseEvents,
-        logLlm: opts.logLlm,
-        transcriptMaxLines: opts.transcriptMaxLines,
-        tui: opts.tui,
         autoApprovePrompts: opts.autoApprove,
-        echoGoverning: opts.echoGoverning,
-        compactConsole: opts.compactConsole,
-        importantOnly: opts.importantOnly,
+        // raw mirroring defaults only
       } as const;
 
       if (opts.printConfig) {
@@ -192,11 +134,7 @@ program
         console.log('[CursorPilot] Effective config:', effective);
       }
 
-      const orchestrator = new Orchestrator({
-        ...effective,
-        autoApprovePrompts: effective.autoApprovePrompts,
-        echoGoverning: effective.echoGoverning,
-      } as any);
+      const orchestrator = new Orchestrator(effective as any);
       await orchestrator.start({ args: [], dryRun: opts.dryRun });
     }
   );
