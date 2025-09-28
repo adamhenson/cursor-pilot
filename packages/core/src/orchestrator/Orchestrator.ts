@@ -1,6 +1,9 @@
 import { constants as fsConstants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - CJS module without types
+import createAnsiDiff from 'ansi-diff-stream';
 import { buildContext } from '../context/ContextBuilder.js';
 import { CursorDetectors } from '../cursor/CursorDetectors.js';
 import type { DetectorPatterns } from '../cursor/CursorDetectors.js';
@@ -10,6 +13,9 @@ import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
 import { Transcript } from '../telemetry/Transcript.js';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - ESM typed but fine to import in NodeNext
+// import logUpdate from 'log-update';
 import { Tui } from '../telemetry/Tui.js';
 
 /** Options that configure the orchestrator runtime behavior. */
@@ -108,6 +114,7 @@ export class Orchestrator {
   private compactTimer: NodeJS.Timeout | undefined;
   private readonly importantOnly: boolean = false;
   private lastFrameLines: string[] = [];
+  private diffStream: any;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -228,6 +235,10 @@ export class Orchestrator {
       });
 
       await this.process.start([]);
+      if (this.compactConsole && !this.useTui) {
+        this.diffStream = createAnsiDiff();
+        this.diffStream.pipe(process.stdout);
+      }
 
       const system = baseSystemPrompt();
 
@@ -241,11 +252,15 @@ export class Orchestrator {
           if (this.compactTimer) clearTimeout(this.compactTimer);
           this.compactTimer = setTimeout(() => {
             const nextFrame = collapseAnsi(this.compactBuffer);
-            renderAtomicFrame({
-              next: nextFrame,
-              prevLines: this.lastFrameLines,
-            });
-            this.lastFrameLines = nextFrame.split('\n');
+            if (this.diffStream) {
+              this.diffStream.write(`${nextFrame}\n`);
+            } else {
+              renderAtomicFrame({
+                next: nextFrame,
+                prevLines: this.lastFrameLines,
+              });
+              this.lastFrameLines = nextFrame.split('\n');
+            }
             this.compactBuffer = '';
           }, 150);
         }
