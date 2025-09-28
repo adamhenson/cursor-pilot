@@ -1,4 +1,4 @@
-import { Terminal } from '@xterm/headless';
+import { createRequire } from 'node:module';
 import blessed from 'blessed';
 
 /** Minimal blessed-based TUI to show recent output and status with CR-aware rendering. */
@@ -35,7 +35,12 @@ export class Tui {
     });
     this.screen.key(['q', 'C-c'], () => this.destroy());
     this.screen.render();
-    this.term = new Terminal({ cols: 120, rows: 40 });
+    // Load @xterm/headless via CJS require for ESM compatibility
+    const require = createRequire(import.meta.url);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const XHeadless = require('@xterm/headless');
+    const TerminalCtor = XHeadless.Terminal || XHeadless.default?.Terminal || XHeadless;
+    this.term = new TerminalCtor({ cols: 120, rows: 40 });
     this.term.onData((data: string) => {
       // Headless terminal emits input; ignore for now
     });
