@@ -236,8 +236,9 @@ export class Orchestrator {
           if (this.compactTimer) clearTimeout(this.compactTimer);
           this.compactTimer = setTimeout(() => {
             const frame = collapseAnsi(this.compactBuffer);
-            // Clear line and rewrite a frame block
-            process.stdout.write(`\r\x1b[2K${frame}\n`);
+            // Clear entire screen and move cursor home before rendering the new frame
+            process.stdout.write('\x1b[H\x1b[2J');
+            process.stdout.write(frame);
             this.compactBuffer = '';
           }, 150);
         }
