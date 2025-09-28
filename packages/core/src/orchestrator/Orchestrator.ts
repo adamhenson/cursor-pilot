@@ -107,6 +107,7 @@ export class Orchestrator {
   private compactBuffer = '';
   private compactTimer: NodeJS.Timeout | undefined;
   private readonly importantOnly: boolean = false;
+  private lastFrameLines: string[] = [];
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -239,10 +240,12 @@ export class Orchestrator {
           this.compactBuffer += chunk;
           if (this.compactTimer) clearTimeout(this.compactTimer);
           this.compactTimer = setTimeout(() => {
-            const frame = collapseAnsi(this.compactBuffer);
-            // Clear entire screen and move cursor home, clear scrollback
-            process.stdout.write('\x1b[H\x1b[3J\x1b[2J');
-            process.stdout.write(frame);
+            const nextFrame = collapseAnsi(this.compactBuffer);
+            renderAtomicFrame({
+              next: nextFrame,
+              prevLines: this.lastFrameLines,
+            });
+            this.lastFrameLines = nextFrame.split('\n');
             this.compactBuffer = '';
           }, 150);
         }
@@ -680,4 +683,43 @@ function extractHighlight(input: string): string | undefined {
   const err = s.match(/(error|failed|cannot|timeout)/i);
   if (err) return s.trim().slice(0, 200);
   return undefined;
+}
+
+function renderAtomicFrame({
+  next,
+  prevLines,
+}: {
+  next: string;
+  prevLines: string[];
+}): void {
+  const nextLines = next.split('\n');
+  // Hide cursor during redraw
+  process.stdout.write('\x1b[?25l');
+  // Move cursor home
+  process.stdout.write('\x1b[H');
+  const maxLines = Math.max(prevLines.length, nextLines.length);
+  for (let i = 0; i < maxLines; i += 1) {
+    const prevLine = prevLines[i] ?? '';
+    const nextLine = nextLines[i] ?? '';
+    if (prevLine === nextLine) {
+      // Move to next line without writing
+      process.stdout.write('\x1b[1B\r');
+      continue;
+    }
+    // Clear current line and write new content
+    process.stdout.write('\x1b[2K');
+    process.stdout.write(nextLine);
+    // Move to next line
+    process.stdout.write('\r\n');
+  }
+  // If new frame has fewer lines, clear the rest of old content
+  if (nextLines.length < prevLines.length) {
+    for (let i = nextLines.length; i < prevLines.length; i += 1) {
+      process.stdout.write('\x1b[2K\r\n');
+    }
+  }
+  // Move cursor back to last line start
+  process.stdout.write('\r');
+  // Show cursor
+  process.stdout.write('\x1b[?25h');
 }
