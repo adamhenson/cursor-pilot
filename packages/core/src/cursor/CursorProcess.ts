@@ -13,6 +13,7 @@ export class CursorProcess {
   private readonly options: CursorProcessOptions;
   private ptyProc: pty.IPty | undefined;
   private dataSubscribers: Array<(chunk: string) => void> = [];
+  private removeResizeListener: (() => void) | undefined;
 
   /** Construct a new CursorProcess wrapper. */
   public constructor(options: CursorProcessOptions) {
@@ -22,18 +23,34 @@ export class CursorProcess {
   /** Start the PTY shell; does not automatically run a cursor command. */
   public async start(_: string[]): Promise<void> {
     const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
+    const cols = (process.stdout as any)?.columns ?? 120;
+    const rows = (process.stdout as any)?.rows ?? 30;
     this.ptyProc = pty.spawn(shell, [], {
-      name: 'xterm-color',
-      cols: 120,
-      rows: 30,
+      name: 'xterm-256color',
+      cols,
+      rows,
       cwd: this.options.cwd,
       env: process.env,
     });
 
     this.ptyProc.onData((data) => {
-      process.stdout.write(data);
       for (const subscriber of this.dataSubscribers) subscriber(data);
     });
+
+    // Sync PTY size with host TTY
+    const resizeHandler = () => {
+      try {
+        const ncols = (process.stdout as any)?.columns ?? cols;
+        const nrows = (process.stdout as any)?.rows ?? rows;
+        this.ptyProc?.resize(ncols, nrows);
+      } catch {
+        // ignore
+      }
+    };
+    (process.stdout as any)?.on?.('resize', resizeHandler);
+    this.removeResizeListener = () => {
+      (process.stdout as any)?.off?.('resize', resizeHandler);
+    };
   }
 
   /** Execute a cursor command line within the PTY. */
@@ -64,6 +81,10 @@ export class CursorProcess {
     try {
       this.ptyProc.kill();
     } finally {
+      if (this.removeResizeListener) {
+        this.removeResizeListener();
+        this.removeResizeListener = undefined;
+      }
       this.ptyProc = undefined;
       this.dataSubscribers = [];
     }
