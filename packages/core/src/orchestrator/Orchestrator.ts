@@ -152,13 +152,15 @@ export class Orchestrator {
       : undefined;
 
     const planCursorArgs = plan?.steps?.[0]?.cursor ?? [];
-    const argv = (args && args.length > 0 ? args : planCursorArgs) ?? [];
+    const inputArgs = (args && args.length > 0 ? args : planCursorArgs) ?? [];
+    const argv = inputArgs.length > 0 ? inputArgs : ['agent'];
 
     // Determine if any interactive cursor steps exist
     const hasInteractiveCursor = Boolean(
-      plan?.steps?.some((s) =>
-        s.cursor?.some((c) => c.split(' ').filter(Boolean).includes('agent'))
-      )
+      argv.some((c) => c.split(' ').filter(Boolean).includes('agent')) ||
+        plan?.steps?.some((s) =>
+          s.cursor?.some((c) => c.split(' ').filter(Boolean).includes('agent'))
+        )
     );
 
     if (dryRun) {
@@ -238,6 +240,28 @@ export class Orchestrator {
       });
 
       await this.process.start([]);
+      // If we have initial args to run (including default 'agent'), execute now
+      if (argv.length) {
+        const parts = (Array.isArray(argv) ? argv : [argv]).flatMap((v) =>
+          v.split(' ').filter(Boolean)
+        );
+        await this.process.execCursor(parts);
+        // Inject governing prompt once at startup to orient the agent
+        if (governingText && governingText.trim().length > 0) {
+          await new Promise((r) => setTimeout(r, 500));
+          await this.process?.write(governingText);
+          await new Promise((r) => setTimeout(r, 300));
+          await this.process?.write('');
+          this.transcript?.seedPrompt(governingText);
+          if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
+          this.seedNudgeTimer = setTimeout(async () => {
+            await this.process?.write('');
+            await new Promise((r) => setTimeout(r, 200));
+            await this.process?.write('Auto');
+            this.transcript?.note('Sent idle nudge');
+          }, 3000);
+        }
+      }
       if (this.compactConsole && !this.useTui) {
         this.diffStream = createAnsiDiff();
         this.diffStream.pipe(process.stdout);
