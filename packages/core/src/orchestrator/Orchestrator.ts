@@ -322,6 +322,10 @@ export class Orchestrator {
           /Run this command\?/i.test(chunk) || /Not in allowlist:/i.test(chunk);
         // Handle run confirmation prompts
         if (isApprovalPrompt) {
+          const approvalCmds = extractApprovalCommandsFromChunk(chunk);
+          if (approvalCmds) {
+            this.transcript?.cursorHighlight(`Auto-approve prompt for: ${approvalCmds}`);
+          }
           if (this.autoApprovePrompts) {
             // Wait until options line is visible to press Enter
             const hasOptions = /(Run\s*\(y\)\s*\(enter\))/i.test(chunk);
@@ -382,6 +386,12 @@ export class Orchestrator {
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
         // Event markers omitted from transcript
+
+        if (eventType === 'completed') {
+          this.transcript?.note('Cursor reported completion');
+          await this.stop();
+          return;
+        }
 
         if (eventType === 'idle') {
           this.consecutiveIdle += 1;
@@ -655,6 +665,17 @@ function getViewportFrame(term: any): string {
     lines.push(line ? line.translateToString() : '');
   }
   return lines.join('\n');
+}
+
+function extractApprovalCommandsFromChunk(chunk: string): string | undefined {
+  const s = stripAnsi(chunk);
+  // Heuristic: look for lines after "Not in allowlist:" or in the block before "Run (y)"
+  const m = s.match(/Not in allowlist:\s*([^\n]+)/i);
+  if (m) return m[1].trim();
+  const block = s.split('\n').slice(-5).join(' ');
+  const cmd = block.match(/\$\s+(.+?)\s*(Run \(y\))/);
+  if (cmd) return cmd[1].trim();
+  return undefined;
 }
 function renderAtomicFrame({
   next,
