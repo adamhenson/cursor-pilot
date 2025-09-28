@@ -268,8 +268,10 @@ export class Orchestrator {
       const system = baseSystemPrompt();
 
       this.process.onData(async (chunk) => {
-        // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
-        if (!this.useTui && !this.compactConsole && !this.importantOnly) process.stdout.write('');
+        // Mirror raw PTY output exactly when not using special renderers
+        if (!this.useTui && !this.compactConsole && !this.importantOnly) {
+          process.stdout.write(chunk);
+        }
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
         if (this.useTui) this.tui?.append(chunk);
         if (this.compactConsole && !this.useTui) {
