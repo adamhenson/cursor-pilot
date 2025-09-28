@@ -58,6 +58,8 @@ export type OrchestratorOptions = {
   transcriptMaxLines?: number;
   /** Whether to render compact TUI (suppresses raw stdout mirror) */
   tui?: boolean;
+  /** Whether to render compact buffered console output */
+  compactConsole?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -99,6 +101,9 @@ export class Orchestrator {
   private trustedWorkspace = false;
   private readonly useTui: boolean;
   private tui: Tui | undefined;
+  private readonly compactConsole: boolean = false;
+  private compactBuffer = '';
+  private compactTimer: NodeJS.Timeout | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -108,6 +113,7 @@ export class Orchestrator {
     this.autoApprovePrompts = Boolean(options.autoApprovePrompts);
     this.echoGoverning = Boolean(options.echoGoverning);
     this.useTui = Boolean(options.tui);
+    this.compactConsole = Boolean(options.compactConsole);
   }
 
   /** Start a run session, optionally in dry-run mode. */
@@ -222,9 +228,19 @@ export class Orchestrator {
 
       this.process.onData(async (chunk) => {
         // TUI mode: suppress raw stdout mirroring; otherwise keep stream alive
-        if (!this.useTui) process.stdout.write('');
+        if (!this.useTui && !this.compactConsole) process.stdout.write('');
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
         if (this.useTui) this.tui?.append(chunk);
+        if (this.compactConsole && !this.useTui) {
+          this.compactBuffer += chunk;
+          if (this.compactTimer) clearTimeout(this.compactTimer);
+          this.compactTimer = setTimeout(() => {
+            const frame = collapseAnsi(this.compactBuffer);
+            // Clear line and rewrite a frame block
+            process.stdout.write(`\r\x1b[2K${frame}\n`);
+            this.compactBuffer = '';
+          }, 150);
+        }
         // In TUI mode we mirror raw PTY output only (no overlay rendering)
 
         // Auto-accept workspace trust prompt if detected
@@ -543,6 +559,7 @@ export class Orchestrator {
     if (this.stopTimer) clearTimeout(this.stopTimer);
     if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
     if (this.approvalFallbackTimer) clearTimeout(this.approvalFallbackTimer);
+    if (this.compactTimer) clearTimeout(this.compactTimer);
     await this.process?.dispose();
     if (this.tui) this.tui.destroy();
     this.transcript?.close();
@@ -581,4 +598,54 @@ function stripAnsi(input: string): string {
     i += 1;
   }
   return result;
+}
+
+function collapseAnsi(input: string): string {
+  // Very simple frame collapse: remove OSC sequences, interpret CR as line reset, and strip cursor-position sequences
+  let out = '';
+  let line = '';
+  let i = 0;
+  const n = input.length;
+  while (i < n) {
+    const c = input.charCodeAt(i);
+    if (c === 0x1b && i + 1 < n) {
+      const next = input.charAt(i + 1);
+      if (next === '[') {
+        // skip CSI sequence
+        i += 2;
+        while (i < n) {
+          const ch = input.charAt(i);
+          if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+            i += 1;
+            break;
+          }
+          i += 1;
+        }
+        continue;
+      }
+      if (next === ']') {
+        // skip OSC sequence to BEL
+        i += 2;
+        while (i < n && input.charCodeAt(i) !== 0x07) i += 1;
+        if (i < n) i += 1;
+        continue;
+      }
+    }
+    if (c === 0x0d) {
+      // CR: reset current line
+      line = '';
+      i += 1;
+      continue;
+    }
+    if (c === 0x0a) {
+      out += `${line}\n`;
+      line = '';
+      i += 1;
+      continue;
+    }
+    line += input.charAt(i);
+    i += 1;
+  }
+  if (line.length > 0) out += `${line}`;
+  return out;
 }
