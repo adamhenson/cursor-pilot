@@ -2,6 +2,10 @@ import { constants as fsConstants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - ESM typed but fine to import in NodeNext
+// import logUpdate from 'log-update';
+import { createRequire } from 'node:module';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - CJS module without types
 import createAnsiDiff from 'ansi-diff-stream';
 import { buildContext } from '../context/ContextBuilder.js';
@@ -13,9 +17,6 @@ import { type ProviderName, createProvider } from '../llm/ProviderFactory.js';
 import { loadPlan } from '../plan/PlanLoader.js';
 import { baseSystemPrompt } from '../prompts/systemPrompt.js';
 import { Transcript } from '../telemetry/Transcript.js';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - ESM typed but fine to import in NodeNext
-// import logUpdate from 'log-update';
 import { Tui } from '../telemetry/Tui.js';
 
 /** Options that configure the orchestrator runtime behavior. */
@@ -115,6 +116,7 @@ export class Orchestrator {
   private readonly importantOnly: boolean = false;
   private lastFrameLines: string[] = [];
   private diffStream: any;
+  private compactTerm: any;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -238,6 +240,29 @@ export class Orchestrator {
       if (this.compactConsole && !this.useTui) {
         this.diffStream = createAnsiDiff();
         this.diffStream.pipe(process.stdout);
+        // Hidden headless xterm to normalize ANSI into a stable viewport
+        const require = createRequire(import.meta.url);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const XHeadless = require('@xterm/headless');
+        const TerminalCtor = XHeadless.Terminal || XHeadless.default?.Terminal || XHeadless;
+        const cols = (process.stdout as any).columns || 120;
+        const rows = (process.stdout as any).rows || 40;
+        this.compactTerm = new TerminalCtor({
+          cols,
+          rows,
+          allowProposedApi: true,
+          disableStdin: true,
+        });
+        // Resize with host terminal
+        if (process.stdout && typeof (process.stdout as any).on === 'function') {
+          (process.stdout as any).on('resize', () => {
+            try {
+              const ncols = (process.stdout as any).columns || cols;
+              const nrows = (process.stdout as any).rows || rows;
+              this.compactTerm?.resize(ncols, nrows);
+            } catch {}
+          });
+        }
       }
 
       const system = baseSystemPrompt();
@@ -248,10 +273,14 @@ export class Orchestrator {
         this.transcript?.write({ ts: Date.now(), type: 'stdout', chunk });
         if (this.useTui) this.tui?.append(chunk);
         if (this.compactConsole && !this.useTui) {
+          // Write raw chunk to hidden xterm to interpret CR/ANSI correctly
+          this.compactTerm?.write(chunk);
           this.compactBuffer += chunk;
           if (this.compactTimer) clearTimeout(this.compactTimer);
           this.compactTimer = setTimeout(() => {
-            const nextFrame = collapseAnsi(this.compactBuffer);
+            const nextFrame = this.compactTerm
+              ? getViewportFrame(this.compactTerm)
+              : collapseAnsi(this.compactBuffer);
             if (this.diffStream) {
               this.diffStream.write(`${nextFrame}\n`);
             } else {
@@ -384,7 +413,7 @@ export class Orchestrator {
 
         const eventType = this.detectors?.ingestChunk(chunk);
         if (!eventType) return;
-        if (this.verboseEvents && !this.useTui && !this.importantOnly) {
+        if (this.verboseEvents && !this.useTui && !this.importantOnly && !this.compactConsole) {
           // eslint-disable-next-line no-console
           console.log('[CursorPilot] event:', eventType);
         }
@@ -700,6 +729,19 @@ function extractHighlight(input: string): string | undefined {
   return undefined;
 }
 
+function getViewportFrame(term: any): string {
+  const lines: string[] = [];
+  const buffer = term.buffer.active;
+  const viewportTop = buffer.viewportY ?? 0;
+  const rows = term.rows ?? 40;
+  const end = Math.min(buffer.length, viewportTop + rows);
+  const start = Math.max(0, end - rows);
+  for (let y = start; y < end; y += 1) {
+    const line = buffer.getLine(y);
+    lines.push(line ? line.translateToString() : '');
+  }
+  return lines.join('\n');
+}
 function renderAtomicFrame({
   next,
   prevLines,
