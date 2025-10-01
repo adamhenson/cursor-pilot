@@ -311,6 +311,10 @@ export class Orchestrator {
       let guidanceRepeatCount = 0;
       const normalizeForDiag = (s: string): string =>
         stripAnsi(s).toLowerCase().replace(/\s+/g, ' ').slice(0, 160);
+      // Idle guidance cooldown to avoid spamming during continuous idle
+      let lastGuidanceAt = 0;
+      let lastGuidanceSig = '';
+      const guidanceCooldownMs = 3000;
 
       this.process.onData(async (chunk) => {
         // Mirror raw PTY output exactly when not using special renderers
@@ -408,20 +412,14 @@ export class Orchestrator {
           if (this.options.guidanceOnly) {
             const cpq = extractCursorPilotQuestion(chunk);
             if (!cpq) {
-              const guidance = guidanceFromGoverning(governingText);
+              // Suppress immediate action; wait for idle to guide
               const diag = normalizeForDiag(chunk);
-              if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
-              else {
-                guidanceRepeatSig = diag;
-                guidanceRepeatCount = 1;
-              }
               this.transcript?.note(
-                `Guidance-only: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
+                `Guidance-only: approval prompt suppressed, waiting for idle: ${diag}`
               );
-              await this.process?.write(guidance);
               return;
             }
-            // If CPQ present, route to LLM
+            // If CPQ present, route to LLM immediately
             const { text } = await provider.complete({
               system,
               user: cpq,
@@ -488,15 +486,26 @@ export class Orchestrator {
               } else if (this.options.autoAnswerIdle) {
                 const guidance = guidanceFromGoverning(governingText);
                 const diag = normalizeForDiag(chunk);
-                if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
-                else {
-                  guidanceRepeatSig = diag;
-                  guidanceRepeatCount = 1;
+                const nowTs = Date.now();
+                const withinCooldown =
+                  nowTs - lastGuidanceAt < guidanceCooldownMs && diag === lastGuidanceSig;
+                if (withinCooldown) {
+                  this.transcript?.note(
+                    `Guidance-only idle: suppressed due to cooldown for: ${diag}`
+                  );
+                } else {
+                  if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
+                  else {
+                    guidanceRepeatSig = diag;
+                    guidanceRepeatCount = 1;
+                  }
+                  this.transcript?.note(
+                    `Guidance-only idle: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
+                  );
+                  await this.process?.write(guidance);
+                  lastGuidanceAt = nowTs;
+                  lastGuidanceSig = diag;
                 }
-                this.transcript?.note(
-                  `Guidance-only idle: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
-                );
-                await this.process?.write(guidance);
               }
             } else {
               const { text } = await provider.complete({
@@ -534,27 +543,21 @@ export class Orchestrator {
           let text: string;
           if (this.options.guidanceOnly) {
             const cpq = extractCursorPilotQuestion(chunk);
-            if (cpq) {
-              const result = await provider.complete({
-                system,
-                user: cpq,
-                maxTokens: 200,
-                temperature: this.options.temperature ?? 0,
-              });
-              text = result.text;
-              this.transcript?.llmExchange({ system, user: cpq, response: text });
-            } else {
-              text = guidanceFromGoverning(governingText);
+            if (!cpq) {
               const diag = normalizeForDiag(chunk);
-              if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
-              else {
-                guidanceRepeatSig = diag;
-                guidanceRepeatCount = 1;
-              }
               this.transcript?.note(
-                `Guidance-only: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
+                `Guidance-only: suppressed immediate action on prompt; waiting for idle: ${diag}`
               );
+              return;
             }
+            const result = await provider.complete({
+              system,
+              user: cpq,
+              maxTokens: 200,
+              temperature: this.options.temperature ?? 0,
+            });
+            text = result.text;
+            this.transcript?.llmExchange({ system, user: cpq, response: text });
           } else {
             const result = await provider.complete({
               system,
