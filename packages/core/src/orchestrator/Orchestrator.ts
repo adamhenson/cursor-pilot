@@ -482,7 +482,7 @@ export class Orchestrator {
           if (limit > 0 && nowTs - this.runningSince > limit) {
             if (!this.runningTimeoutNotified) {
               const seconds = Math.round(limit / 1000);
-              const msg = `CursorPilot Question: It looks like the session might be stuck (no prompts or idle for ${seconds}s). If a GUI dialog is open (e.g., Playwright trace viewer), please close it or proceed. Otherwise, continue with the plan.`;
+              const msg = `[CursorPilot] Session may be stuck (no prompts or idle for ${seconds}s). If a GUI dialog is open (e.g., Playwright trace viewer), please close it or proceed. Otherwise, continue with the plan.`;
               this.transcript?.note(
                 `Running-state timeout hit (${limit}ms); notifying Cursor instead of exiting.`
               );
