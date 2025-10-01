@@ -1,10 +1,5 @@
 {
   "question": ["\\?\\s*$", "^Confirm (yes\\/no):", "^(Proceed|Continue)\\? \\[[yY]\\/n\\]"],
-  "awaitingInput": [
-    "^Enter .*:",
-    "^Provide .*:",
-    "Incorrect tool arguments",
-    "apps/.+/.+\\.spec\\.ts\\s+Incorrect tool arguments"
-  ],
+  "awaitingInput": ["^Enter .*:", "^Provide .*:"],
   "completion": ["^All tasks (completed|done)\\.?$", "^✅ (Build|Refactor|Scaffold) complete"]
 }
