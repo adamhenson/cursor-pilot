@@ -306,6 +306,11 @@ export class Orchestrator {
         const m = plain.match(/CursorPilot Question:\s*(.+)$/i);
         return m ? m[1].trim() : undefined;
       };
+      // Guidance-only diagnostics
+      let guidanceRepeatSig = '';
+      let guidanceRepeatCount = 0;
+      const normalizeForDiag = (s: string): string =>
+        stripAnsi(s).toLowerCase().replace(/\s+/g, ' ').slice(0, 160);
 
       this.process.onData(async (chunk) => {
         // Mirror raw PTY output exactly when not using special renderers
@@ -404,7 +409,15 @@ export class Orchestrator {
             const cpq = extractCursorPilotQuestion(chunk);
             if (!cpq) {
               const guidance = guidanceFromGoverning(governingText);
-              this.transcript?.note('Guidance-only: typing governing guidance');
+              const diag = normalizeForDiag(chunk);
+              if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
+              else {
+                guidanceRepeatSig = diag;
+                guidanceRepeatCount = 1;
+              }
+              this.transcript?.note(
+                `Guidance-only: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
+              );
               await this.process?.write(guidance);
               return;
             }
@@ -474,7 +487,15 @@ export class Orchestrator {
                 }
               } else if (this.options.autoAnswerIdle) {
                 const guidance = guidanceFromGoverning(governingText);
-                this.transcript?.note('Guidance-only idle: typing governing guidance');
+                const diag = normalizeForDiag(chunk);
+                if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
+                else {
+                  guidanceRepeatSig = diag;
+                  guidanceRepeatCount = 1;
+                }
+                this.transcript?.note(
+                  `Guidance-only idle: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
+                );
                 await this.process?.write(guidance);
               }
             } else {
@@ -520,7 +541,15 @@ export class Orchestrator {
               this.transcript?.llmExchange({ system, user: cpq, response: text });
             } else {
               text = guidanceFromGoverning(governingText);
-              this.transcript?.note('Guidance-only: typing governing guidance');
+              const diag = normalizeForDiag(chunk);
+              if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;
+              else {
+                guidanceRepeatSig = diag;
+                guidanceRepeatCount = 1;
+              }
+              this.transcript?.note(
+                `Guidance-only: typing governing guidance (repeat ${guidanceRepeatCount}): ${diag}`
+              );
             }
           } else {
             const result = await provider.complete({
