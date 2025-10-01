@@ -71,6 +71,7 @@ program
     (v) => Number(v),
     envGuidanceCooldownMs
   )
+  .option('--idle-strict', 'Use strict idle detection (exact normalized repeat)', false)
   .option(
     '--print-config',
     'Print effective config before run',
@@ -123,6 +124,7 @@ program
       printConfig?: boolean;
       guidanceOnly?: boolean;
       guidanceCooldownMs?: number;
+      idleStrict?: boolean;
       // simplified args only
     }) => {
       const effective = {
@@ -144,6 +146,7 @@ program
         autoApprovePrompts: opts.autoApprove,
         guidanceOnly: opts.guidanceOnly,
         guidanceCooldownMs: opts.guidanceCooldownMs,
+        idleStrict: opts.idleStrict,
         // raw mirroring defaults only
       } as const;
 

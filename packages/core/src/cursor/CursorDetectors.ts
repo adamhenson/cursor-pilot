@@ -33,13 +33,16 @@ export class CursorDetectors {
   private lastMeaningfulSignature = '';
   private readonly idleThresholdMs: number;
   private readonly patterns: Required<DetectorPatterns>;
+  private readonly idleStrict: boolean;
 
   /** Create a new detectors instance with an optional idle threshold and pattern overrides. */
   public constructor({
     idleThresholdMs = 800,
     patterns = {} as DetectorPatterns,
-  }: { idleThresholdMs?: number; patterns?: DetectorPatterns } = {}) {
+    idleStrict = false,
+  }: { idleThresholdMs?: number; patterns?: DetectorPatterns; idleStrict?: boolean } = {}) {
     this.idleThresholdMs = idleThresholdMs;
+    this.idleStrict = idleStrict;
     const base = {
       question: patterns.question ?? defaultDetectorPatterns.question,
       awaitingInput: patterns.awaitingInput ?? defaultDetectorPatterns.awaitingInput,
@@ -61,13 +64,19 @@ export class CursorDetectors {
     if (containsMeaningfulText(ansiStripped)) {
       const currentSignature = normalizeForSignature(ansiStripped);
       if (currentSignature.length > 0) {
-        // Only refresh the meaningful timestamp when signature changes
-        if (currentSignature !== this.lastMeaningfulSignature) {
-          this.lastMeaningfulSignature = currentSignature;
-          this.lastMeaningfulAt = now;
+        if (this.idleStrict) {
+          // In strict mode, refresh only on exact signature change (same as default)
+          if (currentSignature !== this.lastMeaningfulSignature) {
+            this.lastMeaningfulSignature = currentSignature;
+            this.lastMeaningfulAt = now;
+          }
+        } else {
+          // Default: same behavior as before
+          if (currentSignature !== this.lastMeaningfulSignature) {
+            this.lastMeaningfulSignature = currentSignature;
+            this.lastMeaningfulAt = now;
+          }
         }
-        // else: same signature as last time → consider it a stall; do not
-        // refresh lastMeaningfulAt so idle can eventually fire
       }
     }
     const refTs = this.lastMeaningfulAt || this.lastEmitAt;

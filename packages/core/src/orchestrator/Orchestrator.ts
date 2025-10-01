@@ -73,6 +73,8 @@ export type OrchestratorOptions = {
   guidanceOnly?: boolean;
   /** Minimum interval between guidance messages during idle */
   guidanceCooldownMs?: number;
+  /** Use strict idle detection (exact normalized repeat) */
+  idleStrict?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -213,6 +215,7 @@ export class Orchestrator {
     this.detectors = new CursorDetectors({
       idleThresholdMs: this.options.idleMs ?? 5000,
       patterns: patternsOverride,
+      idleStrict: Boolean(this.options.idleStrict),
     });
     this.transcript = this.options.logDir
       ? new MarkdownTranscript({ logDir: this.options.logDir })
@@ -469,7 +472,7 @@ export class Orchestrator {
 
         if (eventType === 'idle') {
           this.consecutiveIdle += 1;
-          if (this.consecutiveIdle >= 2) {
+          if (this.consecutiveIdle >= 1) {
             const { userPrompt } = await buildContext({
               governingPrompt: governingText,
               recentOutput: chunk,
