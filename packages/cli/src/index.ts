@@ -33,6 +33,9 @@ const envIdleStrict = Boolean(
     process.env.CURSORPILOT_IDLE_STRICT !== '0' &&
     process.env.CURSORPILOT_IDLE_STRICT.toLowerCase() !== 'false'
 );
+const envRunningTimeoutMs = process.env.CURSORPILOT_RUNNING_TIMEOUT_MS
+  ? Number(process.env.CURSORPILOT_RUNNING_TIMEOUT_MS)
+  : undefined;
 // verbose events removed; always quiet
 const envAutoApprove = Boolean(
   process.env.CURSORPILOT_AUTO_APPROVE &&
@@ -105,6 +108,12 @@ program
     (v) => Number(v),
     envCursorCmdTimeoutMs
   )
+  .option(
+    '--running-timeout-ms <num>',
+    'Timeout for continuous running state without questions/idle (ms)',
+    (v) => Number(v),
+    envRunningTimeoutMs
+  )
   // no verbose event printing
   .allowExcessArguments(false)
   .action(
@@ -130,6 +139,7 @@ program
       guidanceOnly?: boolean;
       guidanceCooldownMs?: number;
       idleStrict?: boolean;
+      runningTimeoutMs?: number;
       // simplified args only
     }) => {
       const effective = {
@@ -152,6 +162,7 @@ program
         guidanceOnly: opts.guidanceOnly,
         guidanceCooldownMs: opts.guidanceCooldownMs,
         idleStrict: opts.idleStrict,
+        runningTimeoutMs: opts.runningTimeoutMs,
         // raw mirroring defaults only
       } as const;
 

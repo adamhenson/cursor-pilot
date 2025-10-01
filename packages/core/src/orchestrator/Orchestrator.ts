@@ -75,6 +75,8 @@ export type OrchestratorOptions = {
   guidanceCooldownMs?: number;
   /** Use strict idle detection (exact normalized repeat) */
   idleStrict?: boolean;
+  /** Timeout for continuous running state with no prompts/idle (ms) */
+  runningTimeoutMs?: number;
 };
 
 async function resolveGoverningPrompt(
@@ -123,6 +125,7 @@ export class Orchestrator {
   private lastFrameLines: string[] = [];
   private diffStream: any;
   private compactTerm: any;
+  private runningSince = 0;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -468,6 +471,22 @@ export class Orchestrator {
           this.transcript?.note('Cursor reported completion');
           await this.stop();
           return;
+        }
+
+        // Running watchdog: exit if stuck in running for too long
+        if (eventType === 'running') {
+          const nowTs = Date.now();
+          if (this.runningSince === 0) this.runningSince = nowTs;
+          const limit = this.options.runningTimeoutMs ?? 0;
+          if (limit > 0 && nowTs - this.runningSince > limit) {
+            this.transcript?.note(
+              `Run stopped: running-state timeout exceeded (${limit}ms) without prompts or idle`
+            );
+            await this.stop();
+            return;
+          }
+        } else {
+          this.runningSince = 0;
         }
 
         if (eventType === 'idle') {
