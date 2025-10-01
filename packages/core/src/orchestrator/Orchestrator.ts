@@ -534,16 +534,18 @@ export class Orchestrator {
           }
 
           const qaHash = `${eventType}|${text}`;
-          if (this.lastQAHash === qaHash) {
-            this.repeatedCount += 1;
-            if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
-              this.transcript?.note('Loop breaker triggered');
-              await this.stop();
-              return;
+          if (!this.options.guidanceOnly) {
+            if (this.lastQAHash === qaHash) {
+              this.repeatedCount += 1;
+              if (this.options.loopBreaker && this.repeatedCount >= this.options.loopBreaker) {
+                this.transcript?.note('Loop breaker triggered');
+                await this.stop();
+                return;
+              }
+            } else {
+              this.lastQAHash = qaHash;
+              this.repeatedCount = 0;
             }
-          } else {
-            this.lastQAHash = qaHash;
-            this.repeatedCount = 0;
           }
 
           // Mirror output only; no extra logging
