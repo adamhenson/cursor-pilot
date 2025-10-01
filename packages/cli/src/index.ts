@@ -28,6 +28,11 @@ const envDetectorsPath = process.env.CURSORPILOT_DETECTORS;
 const envGuidanceCooldownMs = process.env.CURSORPILOT_GUIDANCE_COOLDOWN_MS
   ? Number(process.env.CURSORPILOT_GUIDANCE_COOLDOWN_MS)
   : undefined;
+const envIdleStrict = Boolean(
+  process.env.CURSORPILOT_IDLE_STRICT &&
+    process.env.CURSORPILOT_IDLE_STRICT !== '0' &&
+    process.env.CURSORPILOT_IDLE_STRICT.toLowerCase() !== 'false'
+);
 // verbose events removed; always quiet
 const envAutoApprove = Boolean(
   process.env.CURSORPILOT_AUTO_APPROVE &&
@@ -71,7 +76,7 @@ program
     (v) => Number(v),
     envGuidanceCooldownMs
   )
-  .option('--idle-strict', 'Use strict idle detection (exact normalized repeat)', false)
+  .option('--idle-strict', 'Use strict idle detection (exact normalized repeat)', envIdleStrict)
   .option(
     '--print-config',
     'Print effective config before run',
