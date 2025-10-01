@@ -23,16 +23,16 @@ export class OpenAIProvider implements LLMProvider {
   }): Promise<{ text: string; tokensUsed: number }> {
     const isGpt5 = this.model.toLowerCase().startsWith('gpt-5');
 
-    // Helper to call Responses API (used for gpt-5 or as fallback)
+    // Helper to call Responses API (used for gpt-5 or as fallback).
+    // Some models do not support temperature; omit it entirely here.
     const callResponses = async () => {
       const resp = await this.client.responses.create({
         model: this.model,
-        // Use defaults for gpt-5 (no explicit token limit); concatenate prompts
+        // Use defaults for responses-capable models; concatenate prompts
         input: [
           { role: 'system', content: input.system },
           { role: 'user', content: input.user },
         ],
-        temperature: input.temperature ?? 0,
       } as any);
       const text = (resp as any).output_text ?? '';
       const usage: any = (resp as any).usage ?? {};
@@ -45,7 +45,7 @@ export class OpenAIProvider implements LLMProvider {
       return await callResponses();
     }
 
-    // Otherwise try Chat Completions; if the model rejects max_tokens, fallback to Responses
+    // Otherwise try Chat Completions; if the model rejects a param (e.g., max_tokens/temperature), fallback to Responses
     try {
       const resp = await this.client.chat.completions.create({
         model: this.model,
@@ -60,8 +60,14 @@ export class OpenAIProvider implements LLMProvider {
       const tokensUsed = resp.usage ? (resp.usage.total_tokens ?? 0) : 0;
       return { text, tokensUsed };
     } catch (err: any) {
-      // If param error (e.g., max_tokens unsupported), fallback to Responses API
-      if (err?.code === 'unsupported_parameter' || /max_tokens/i.test(String(err?.message))) {
+      // If parameter error (e.g., max_tokens/temperature unsupported), fallback to Responses API
+      const message = String(err?.message ?? err ?? '');
+      if (
+        err?.code === 'unsupported_parameter' ||
+        /max_tokens/i.test(message) ||
+        /temperature/i.test(message) ||
+        /unsupported parameter/i.test(message)
+      ) {
         return await callResponses();
       }
       throw err;

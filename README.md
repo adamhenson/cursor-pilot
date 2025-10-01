@@ -55,10 +55,11 @@ See `ENV_VARS.md` for supported variables and an example `.env`.
 ## Quickstart
 
 ```bash
-npm run dev -- run \  
+npm run dev -- run \
   --cwd "../zet" \
   --prompt "../zet/cursor-pilot/2025-10-01-governing-prompt-fix-tests.md" \
-  --plan "../zet/cursor-pilot/plan-tests.yml"
+  --plan "../zet/cursor-pilot/plan-tests.yml" \
+  --detectors "/Users/adam/Projects/cursor-pilot/detectors.json"
 ```
 
 ## Quickstart (Dry Run)
