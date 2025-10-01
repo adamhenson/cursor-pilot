@@ -75,6 +75,13 @@ export class CursorProcess {
     this.ptyProc.write(`${line.replace(/\n/g, '\r')}\r`);
   }
 
+  /** Send a single control character, e.g., Ctrl+O (0x0F). */
+  public async sendControlChar(charCode: number): Promise<void> {
+    if (!this.ptyProc) return;
+    const buf = String.fromCharCode(charCode);
+    this.ptyProc.write(buf);
+  }
+
   /** Dispose of the PTY process and clear subscribers. */
   public async dispose(): Promise<void> {
     if (!this.ptyProc) return;

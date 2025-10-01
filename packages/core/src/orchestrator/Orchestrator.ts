@@ -532,6 +532,12 @@ export class Orchestrator {
                   lastGuidanceAt = nowTs;
                   lastGuidanceSig = diag;
                 }
+
+                // Optional: try expanding output (Ctrl+O) once when idle
+                try {
+                  await this.process?.sendControlChar(0x0f);
+                  this.transcript?.note('Sent Ctrl+O to expand output');
+                } catch {}
               }
             } else {
               const { text } = await provider.complete({
