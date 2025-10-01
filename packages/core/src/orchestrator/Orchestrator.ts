@@ -296,9 +296,15 @@ export class Orchestrator {
       const guidanceFromGoverning = (text: string | undefined): string => {
         const trimmed = (text || '').trim();
         if (trimmed.length > 0) {
-          return `Remember the requirements:\n${trimmed}\n\nUse your best judgement to push forward until requirements are fulfilled.`;
+          return `Remember the requirements:\n${trimmed}\n\nUse your best judgement to push forward until requirements are fulfilled.\n\nIf you have a question for me, please prepend with 'CursorPilot Question:'`;
         }
-        return 'Use your best judgement to push forward until requirements are fulfilled.';
+        return "Use your best judgement to push forward until requirements are fulfilled.\n\nIf you have a question for me, please prepend with 'CursorPilot Question:'";
+      };
+
+      const extractCursorPilotQuestion = (s: string): string | undefined => {
+        const plain = stripAnsi(s);
+        const m = plain.match(/CursorPilot Question:\s*(.+)$/i);
+        return m ? m[1].trim() : undefined;
       };
 
       this.process.onData(async (chunk) => {
@@ -395,9 +401,22 @@ export class Orchestrator {
             cwd,
           });
           if (this.options.guidanceOnly) {
-            const guidance = guidanceFromGoverning(governingText);
-            this.transcript?.note('Guidance-only: typing governing guidance');
-            await this.process?.write(guidance);
+            const cpq = extractCursorPilotQuestion(chunk);
+            if (!cpq) {
+              const guidance = guidanceFromGoverning(governingText);
+              this.transcript?.note('Guidance-only: typing governing guidance');
+              await this.process?.write(guidance);
+              return;
+            }
+            // If CPQ present, route to LLM
+            const { text } = await provider.complete({
+              system,
+              user: cpq,
+              maxTokens: 64,
+              temperature: this.options.temperature ?? 0,
+            });
+            this.transcript?.llmExchange({ system, user: cpq, response: text });
+            await this.process?.write(text);
             return;
           }
           this.transcript?.llmExchange({ system, user: userPrompt, response: '' });
@@ -441,7 +460,19 @@ export class Orchestrator {
               cwd,
             });
             if (this.options.guidanceOnly) {
-              if (this.options.autoAnswerIdle) {
+              const cpq = extractCursorPilotQuestion(chunk);
+              if (cpq) {
+                const { text } = await provider.complete({
+                  system,
+                  user: cpq,
+                  maxTokens: 64,
+                  temperature: this.options.temperature ?? 0,
+                });
+                this.transcript?.llmExchange({ system, user: cpq, response: text });
+                if (this.options.autoAnswerIdle && text && text.trim().length > 0) {
+                  await this.process?.write(text);
+                }
+              } else if (this.options.autoAnswerIdle) {
                 const guidance = guidanceFromGoverning(governingText);
                 this.transcript?.note('Guidance-only idle: typing governing guidance');
                 await this.process?.write(guidance);
@@ -477,8 +508,20 @@ export class Orchestrator {
           });
           let text: string;
           if (this.options.guidanceOnly) {
-            text = guidanceFromGoverning(governingText);
-            this.transcript?.note('Guidance-only: typing governing guidance');
+            const cpq = extractCursorPilotQuestion(chunk);
+            if (cpq) {
+              const result = await provider.complete({
+                system,
+                user: cpq,
+                maxTokens: 200,
+                temperature: this.options.temperature ?? 0,
+              });
+              text = result.text;
+              this.transcript?.llmExchange({ system, user: cpq, response: text });
+            } else {
+              text = guidanceFromGoverning(governingText);
+              this.transcript?.note('Guidance-only: typing governing guidance');
+            }
           } else {
             const result = await provider.complete({
               system,
