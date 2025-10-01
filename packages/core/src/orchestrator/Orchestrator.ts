@@ -71,6 +71,8 @@ export type OrchestratorOptions = {
   importantOnly?: boolean;
   /** When true, bypass LLM and type guidance from governing prompt */
   guidanceOnly?: boolean;
+  /** Minimum interval between guidance messages during idle */
+  guidanceCooldownMs?: number;
 };
 
 async function resolveGoverningPrompt(
@@ -314,7 +316,10 @@ export class Orchestrator {
       // Idle guidance cooldown to avoid spamming during continuous idle
       let lastGuidanceAt = 0;
       let lastGuidanceSig = '';
-      const guidanceCooldownMs = 3000;
+      const guidanceCooldownMs =
+        typeof this.options.guidanceCooldownMs === 'number'
+          ? this.options.guidanceCooldownMs
+          : 8000;
 
       this.process.onData(async (chunk) => {
         // Mirror raw PTY output exactly when not using special renderers
@@ -487,11 +492,10 @@ export class Orchestrator {
                 const guidance = guidanceFromGoverning(governingText);
                 const diag = normalizeForDiag(chunk);
                 const nowTs = Date.now();
-                const withinCooldown =
-                  nowTs - lastGuidanceAt < guidanceCooldownMs && diag === lastGuidanceSig;
+                const withinCooldown = nowTs - lastGuidanceAt < guidanceCooldownMs;
                 if (withinCooldown) {
                   this.transcript?.note(
-                    `Guidance-only idle: suppressed due to cooldown for: ${diag}`
+                    `Guidance-only idle: suppressed due to cooldown (${guidanceCooldownMs}ms)`
                   );
                 } else {
                   if (diag === guidanceRepeatSig) guidanceRepeatCount += 1;

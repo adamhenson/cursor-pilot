@@ -25,6 +25,9 @@ const envCursorCmdTimeoutMs = process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS
   ? Number(process.env.CURSORPILOT_CURSOR_CMD_TIMEOUT_MS)
   : 20000;
 const envDetectorsPath = process.env.CURSORPILOT_DETECTORS;
+const envGuidanceCooldownMs = process.env.CURSORPILOT_GUIDANCE_COOLDOWN_MS
+  ? Number(process.env.CURSORPILOT_GUIDANCE_COOLDOWN_MS)
+  : undefined;
 // verbose events removed; always quiet
 const envAutoApprove = Boolean(
   process.env.CURSORPILOT_AUTO_APPROVE &&
@@ -61,6 +64,12 @@ program
     '--guidance-only',
     'Bypass LLM; type guidance based on governing prompt',
     Boolean(process.env.CURSORPILOT_GUIDANCE_ONLY)
+  )
+  .option(
+    '--guidance-cooldown-ms <num>',
+    'Minimum ms between guidance messages during idle',
+    (v) => Number(v),
+    envGuidanceCooldownMs
   )
   .option(
     '--print-config',
@@ -113,6 +122,7 @@ program
       detectors?: string;
       printConfig?: boolean;
       guidanceOnly?: boolean;
+      guidanceCooldownMs?: number;
       // simplified args only
     }) => {
       const effective = {
@@ -133,6 +143,7 @@ program
         detectorsPath: opts.detectors,
         autoApprovePrompts: opts.autoApprove,
         guidanceOnly: opts.guidanceOnly,
+        guidanceCooldownMs: opts.guidanceCooldownMs,
         // raw mirroring defaults only
       } as const;
 
