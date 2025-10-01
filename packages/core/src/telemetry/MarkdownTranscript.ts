@@ -13,32 +13,33 @@ export type MarkdownTranscriptOptions = {
 export class MarkdownTranscript {
   private readonly filePath: string;
   private stream: ReturnType<typeof createWriteStream>;
+  private closed = false;
 
   public constructor({ logDir, fileName }: MarkdownTranscriptOptions) {
     if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
     this.filePath = join(logDir, fileName ?? 'session.md');
     this.stream = createWriteStream(this.filePath, { flags: 'a' });
     const header = '\n---\n';
-    this.stream.write(header);
+    this.safeWrite(header);
   }
 
   public heading(text: string): void {
-    this.stream.write(`\n### ${text}\n\n`);
+    this.safeWrite(`\n### ${text}\n\n`);
   }
 
   public note(text: string): void {
-    this.stream.write(`- ${text}\n`);
+    this.safeWrite(`- ${text}\n`);
   }
 
   public cursorHighlight(text: string): void {
-    this.stream.write(`- **Cursor**: ${text}\n`);
+    this.safeWrite(`- **Cursor**: ${text}\n`);
   }
 
   public seedPrompt(content: string): void {
-    this.stream.write('\n**Seeded Governing Prompt**\n\n');
-    this.stream.write('```markdown\n');
-    this.stream.write(content.trim());
-    this.stream.write('\n```\n');
+    this.safeWrite('\n**Seeded Governing Prompt**\n\n');
+    this.safeWrite('```markdown\n');
+    this.safeWrite(content.trim());
+    this.safeWrite('\n```\n');
   }
 
   public llmExchange({
@@ -46,26 +47,43 @@ export class MarkdownTranscript {
     user,
     response,
   }: { system: string; user: string; response: string }): void {
-    this.stream.write('\n**LLM Exchange**\n');
-    this.stream.write('- System:\n');
+    this.safeWrite('\n**LLM Exchange**\n');
+    this.safeWrite('- System:\n');
     this.fence(system);
-    this.stream.write('- User:\n');
+    this.safeWrite('- User:\n');
     this.fence(user);
-    this.stream.write('- Response:\n');
+    this.safeWrite('- Response:\n');
     this.fence(response);
   }
 
   public typed(text: string): void {
-    this.stream.write(`- **Typed**: ${text}\n`);
+    this.safeWrite(`- **Typed**: ${text}\n`);
   }
 
   public close(): void {
-    this.stream.end();
+    if (this.closed) return;
+    this.closed = true;
+    try {
+      this.stream.end();
+    } catch {
+      // ignore
+    }
   }
 
   private fence(content: string): void {
-    this.stream.write('```text\n');
-    this.stream.write((content || '').trim());
-    this.stream.write('\n```\n');
+    this.safeWrite('```text\n');
+    this.safeWrite((content || '').trim());
+    this.safeWrite('\n```\n');
+  }
+
+  private safeWrite(chunk: string): void {
+    if (this.closed) return;
+    const s: any = this.stream as any;
+    if (!this.stream || this.stream.destroyed || s.writableEnded === true) return;
+    try {
+      this.stream.write(chunk);
+    } catch {
+      // ignore late writes after close
+    }
   }
 }
