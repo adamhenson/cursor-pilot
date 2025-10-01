@@ -58,6 +58,11 @@ program
   .option('--log <dir>', 'Directory to write transcript logs', process.env.CURSORPILOT_LOG_DIR)
   .option('--detectors <path>', 'Path to detectors JSON overrides', envDetectorsPath)
   .option(
+    '--guidance-only',
+    'Bypass LLM; type guidance based on governing prompt',
+    Boolean(process.env.CURSORPILOT_GUIDANCE_ONLY)
+  )
+  .option(
     '--print-config',
     'Print effective config before run',
     Boolean(process.env.CURSORPILOT_PRINT_CONFIG)
@@ -107,6 +112,7 @@ program
       cursorCmdTimeoutMs?: number;
       detectors?: string;
       printConfig?: boolean;
+      guidanceOnly?: boolean;
       // simplified args only
     }) => {
       const effective = {
@@ -126,6 +132,7 @@ program
         cursorCmdTimeoutMs: opts.cursorCmdTimeoutMs,
         detectorsPath: opts.detectors,
         autoApprovePrompts: opts.autoApprove,
+        guidanceOnly: opts.guidanceOnly,
         // raw mirroring defaults only
       } as const;
 

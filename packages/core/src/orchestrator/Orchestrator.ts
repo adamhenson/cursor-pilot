@@ -69,6 +69,8 @@ export type OrchestratorOptions = {
   compactConsole?: boolean;
   /** Whether to print only important/highlight events to console */
   importantOnly?: boolean;
+  /** When true, bypass LLM and type guidance from governing prompt */
+  guidanceOnly?: boolean;
 };
 
 async function resolveGoverningPrompt(
@@ -291,6 +293,13 @@ export class Orchestrator {
       }
 
       const system = baseSystemPrompt();
+      const guidanceFromGoverning = (text: string | undefined): string => {
+        const trimmed = (text || '').trim();
+        if (trimmed.length > 0) {
+          return `Remember the requirements:\n${trimmed}\n\nUse your best judgement to push forward until requirements are fulfilled.`;
+        }
+        return 'Use your best judgement to push forward until requirements are fulfilled.';
+      };
 
       this.process.onData(async (chunk) => {
         // Mirror raw PTY output exactly when not using special renderers
@@ -379,12 +388,18 @@ export class Orchestrator {
             // already sent Y; do nothing
             return;
           }
-          // Otherwise, send to LLM as a question
+          // Otherwise, send to LLM as a question (or guidance-only)
           const { userPrompt } = await buildContext({
             governingPrompt: governingText,
             recentOutput: chunk,
             cwd,
           });
+          if (this.options.guidanceOnly) {
+            const guidance = guidanceFromGoverning(governingText);
+            this.transcript?.note('Guidance-only: typing governing guidance');
+            await this.process?.write(guidance);
+            return;
+          }
           this.transcript?.llmExchange({ system, user: userPrompt, response: '' });
           try {
             const { text } = await provider.complete({
@@ -425,15 +440,23 @@ export class Orchestrator {
               recentOutput: chunk,
               cwd,
             });
-            const { text } = await provider.complete({
-              system,
-              user: userPrompt,
-              maxTokens: 32,
-              temperature: this.options.temperature ?? 0,
-            });
-            this.transcript?.llmExchange({ system, user: userPrompt, response: text });
-            if (this.options.autoAnswerIdle && text && text.trim().length > 0) {
-              await this.process?.write(text);
+            if (this.options.guidanceOnly) {
+              if (this.options.autoAnswerIdle) {
+                const guidance = guidanceFromGoverning(governingText);
+                this.transcript?.note('Guidance-only idle: typing governing guidance');
+                await this.process?.write(guidance);
+              }
+            } else {
+              const { text } = await provider.complete({
+                system,
+                user: userPrompt,
+                maxTokens: 32,
+                temperature: this.options.temperature ?? 0,
+              });
+              this.transcript?.llmExchange({ system, user: userPrompt, response: text });
+              if (this.options.autoAnswerIdle && text && text.trim().length > 0) {
+                await this.process?.write(text);
+              }
             }
           }
           return;
@@ -452,13 +475,20 @@ export class Orchestrator {
             recentOutput: chunk,
             cwd,
           });
-          const { text } = await provider.complete({
-            system,
-            user: userPrompt,
-            maxTokens: 200,
-            temperature: this.options.temperature ?? 0,
-          });
-          this.transcript?.llmExchange({ system, user: userPrompt, response: text });
+          let text: string;
+          if (this.options.guidanceOnly) {
+            text = guidanceFromGoverning(governingText);
+            this.transcript?.note('Guidance-only: typing governing guidance');
+          } else {
+            const result = await provider.complete({
+              system,
+              user: userPrompt,
+              maxTokens: 200,
+              temperature: this.options.temperature ?? 0,
+            });
+            text = result.text;
+            this.transcript?.llmExchange({ system, user: userPrompt, response: text });
+          }
 
           const qaHash = `${eventType}|${text}`;
           if (this.lastQAHash === qaHash) {
