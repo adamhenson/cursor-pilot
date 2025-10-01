@@ -126,6 +126,7 @@ export class Orchestrator {
   private diffStream: any;
   private compactTerm: any;
   private runningSince = 0;
+  private runningTimeoutNotified = false;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -479,14 +480,21 @@ export class Orchestrator {
           if (this.runningSince === 0) this.runningSince = nowTs;
           const limit = this.options.runningTimeoutMs ?? 0;
           if (limit > 0 && nowTs - this.runningSince > limit) {
-            this.transcript?.note(
-              `Run stopped: running-state timeout exceeded (${limit}ms) without prompts or idle`
-            );
-            await this.stop();
-            return;
+            if (!this.runningTimeoutNotified) {
+              const seconds = Math.round(limit / 1000);
+              const msg = `CursorPilot Question: It looks like the session might be stuck (no prompts or idle for ${seconds}s). If a GUI dialog is open (e.g., Playwright trace viewer), please close it or proceed. Otherwise, continue with the plan.`;
+              this.transcript?.note(
+                `Running-state timeout hit (${limit}ms); notifying Cursor instead of exiting.`
+              );
+              await this.process?.write(msg);
+              this.runningTimeoutNotified = true;
+            }
+            // Reset the timer to avoid flooding; continue monitoring
+            this.runningSince = nowTs;
           }
         } else {
           this.runningSince = 0;
+          this.runningTimeoutNotified = false;
         }
 
         if (eventType === 'idle') {
