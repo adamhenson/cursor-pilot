@@ -52,6 +52,15 @@ When unsure: Ask ONE short clarifying question first; otherwise proceed.
 ## Environment Variables
 See `ENV_VARS.md` for supported variables and an example `.env`.
 
+## Quickstart
+
+```bash
+npm run dev -- run \  
+  --cwd "../zet" \
+  --prompt "../zet/cursor-pilot/2025-10-01-governing-prompt-fix-tests.md" \
+  --plan "../zet/cursor-pilot/plan-tests.yml"
+```
+
 ## Quickstart (Dry Run)
 ```bash
 # Show what would run, without spawning Cursor

@@ -1,0 +1,9 @@
+name: "E2E Test Plan"
+steps:
+  - name: "Initialize project"
+    run: ["echo 'Initializing project...'"]
+  - name: "Run cursor agent"
+    cursor:
+      - "agent"
+  - name: "Finalize"
+    run: ["echo 'Project finalized'"]

@@ -24,6 +24,13 @@ export class CursorDetectors {
   private buffer = '';
   private lastEmitAt = 0;
   private lastMeaningfulAt = 0;
+  /**
+   * Normalized signature of the most recent meaningful output. We only
+   * advance the meaningful timestamp when this signature changes. This
+   * allows us to treat repeated identical output as a stall and emit
+   * an idle event even if characters keep streaming.
+   */
+  private lastMeaningfulSignature = '';
   private readonly idleThresholdMs: number;
   private readonly patterns: Required<DetectorPatterns>;
 
@@ -52,7 +59,16 @@ export class CursorDetectors {
     // Detect meaningful (non-ANSI, non-whitespace) characters to gate idle
     const ansiStripped = stripAnsiSequences(chunk);
     if (containsMeaningfulText(ansiStripped)) {
-      this.lastMeaningfulAt = now;
+      const currentSignature = normalizeForSignature(ansiStripped);
+      if (currentSignature.length > 0) {
+        // Only refresh the meaningful timestamp when signature changes
+        if (currentSignature !== this.lastMeaningfulSignature) {
+          this.lastMeaningfulSignature = currentSignature;
+          this.lastMeaningfulAt = now;
+        }
+        // else: same signature as last time → consider it a stall; do not
+        // refresh lastMeaningfulAt so idle can eventually fire
+      }
     }
     const refTs = this.lastMeaningfulAt || this.lastEmitAt;
     const idle = now - refTs > this.idleThresholdMs;
@@ -143,4 +159,21 @@ function containsMeaningfulText(input: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Produce a coarse, normalized signature string for output chunks so we can
+ * tell whether content has meaningfully changed. Strips ANSI (already done),
+ * lowercases, removes digits, and collapses whitespace.
+ */
+function normalizeForSignature(input: string): string {
+  // Lowercase to ignore casing changes
+  let s = input.toLowerCase();
+  // Remove digits to ignore counters/timestamps/spinner frames like 1/10, 12:34
+  s = s.replace(/[0-9]+/g, '');
+  // Collapse repeated punctuation like ellipses and spinner glyphs to a single char
+  s = s.replace(/[.·••·…]+/g, '.');
+  // Collapse all whitespace to a single space
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
 }
