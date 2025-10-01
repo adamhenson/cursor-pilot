@@ -516,7 +516,11 @@ export class Orchestrator {
         this.consecutiveIdle = 0;
 
         if (eventType === 'question' || eventType === 'awaitingInput') {
-          if (this.options.maxSteps && this.answersTyped >= this.options.maxSteps) {
+          if (
+            this.options.maxSteps &&
+            !this.options.guidanceOnly &&
+            this.answersTyped >= this.options.maxSteps
+          ) {
             this.transcript?.note('Max steps reached');
             await this.stop();
             return;
@@ -579,7 +583,9 @@ export class Orchestrator {
 
           // Mirror output only; no extra logging
           await this.process?.write(text);
-          this.answersTyped += 1;
+          if (!this.options.guidanceOnly) {
+            this.answersTyped += 1;
+          }
         }
       });
     }
