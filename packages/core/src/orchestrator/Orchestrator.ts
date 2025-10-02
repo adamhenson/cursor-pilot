@@ -133,6 +133,8 @@ export class Orchestrator {
   private rollingLines: string[] = [];
   private memoryStream: WriteStream | undefined;
   private lastMemoryCompactAt = 0;
+  private lastMemoryLogged = '';
+  private lastMemoryLoggedAt = 0;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -391,12 +393,28 @@ export class Orchestrator {
         }
         // In TUI mode we mirror raw PTY output only (no overlay rendering)
 
-        // Rolling memory capture (store raw, strip ANSI on write)
+        // Rolling memory capture (store raw for flush fallback)
         this.captureRolling(chunk);
-        if (this.memoryStream) {
-          try {
-            this.memoryStream.write(stripAnsi(chunk));
-          } catch {}
+        // Stream a reduced/highlighted memory line to file to avoid noisy frames
+        const memLine = deriveMemoryLine(chunk);
+        if (memLine) {
+          const now = Date.now();
+          const isDuplicate = memLine === this.lastMemoryLogged;
+          const isSpinner = /\[Cursor\] Running/i.test(memLine) || /Running\.?\.*/i.test(memLine);
+          const withinThrottle = now - this.lastMemoryLoggedAt < 4000; // 4s throttle
+          if (!isDuplicate && !(isSpinner && withinThrottle)) {
+            if (this.memoryStream) {
+              try {
+                this.memoryStream.write(`${memLine}\n`);
+              } catch {}
+            }
+            this.rollingLines.push(memLine);
+            const limit = Math.max(50, Math.min(5000, this.options.memoryLines ?? 500));
+            if (this.rollingLines.length > limit)
+              this.rollingLines = this.rollingLines.slice(-limit);
+            this.lastMemoryLogged = memLine;
+            this.lastMemoryLoggedAt = now;
+          }
         }
         // Opportunistically compact memory file to the last N lines
         await this.maybeCompactMemoryFile();
@@ -954,6 +972,24 @@ function extractApprovalCommandsFromChunk(chunk: string): string | undefined {
   return undefined;
 }
 
+function deriveMemoryLine(chunk: string): string | undefined {
+  const s = stripAnsi(chunk);
+  // Key highlights already used for console. Reuse logic to produce compact memory lines
+  const highlight = extractHighlight(chunk);
+  if (highlight) return highlight;
+  // Reduce "Auto" input frames to a single concise line
+  if (/^\s*→\s*Auto\s*$/m.test(s)) return '[Cursor] Auto typing frame';
+  // Collapse repeated Running spinners
+  const running = s.match(/\bRunning\.?\.*\b/);
+  if (running) return '[Cursor] Running';
+  // Otherwise return first non-empty line truncated
+  const line = s
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  if (!line) return undefined;
+  return line.slice(0, 200);
+}
 // (Removed prototype helpers; implemented as class methods above.)
 function renderAtomicFrame({
   next,
