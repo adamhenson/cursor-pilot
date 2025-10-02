@@ -132,6 +132,7 @@ export class Orchestrator {
   private runningTimeoutNotified = false; // retained but unused; legacy
   private rollingLines: string[] = [];
   private memoryStream: WriteStream | undefined;
+  private lastMemoryCompactAt = 0;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -310,7 +311,8 @@ export class Orchestrator {
 
       const system = baseSystemPrompt();
       // Preload rolling memory from file into initial rollingLines (stripped to last N lines)
-      await this.preloadRollingMemory({ cwd, maxLines: this.options.memoryLines ?? 500 });
+      const maxMemLines = this.options.memoryLines ?? 500;
+      await this.preloadRollingMemory({ cwd, maxLines: maxMemLines });
       // Open streaming memory log if configured
       if (this.options.memoryLogPath) {
         const path = this.options.memoryLogPath.startsWith('/')
@@ -318,6 +320,11 @@ export class Orchestrator {
           : `${cwd}/${this.options.memoryLogPath}`;
         try {
           await mkdir(dirname(path), { recursive: true });
+          // Ensure existing file is capped to limit before opening stream
+          if (this.rollingLines.length > 0) {
+            const content = this.rollingLines.slice(-maxMemLines).join('\n');
+            await writeFile(path, content, 'utf8');
+          }
           this.memoryStream = createWriteStream(path, { flags: 'a' });
         } catch {}
       }
@@ -391,6 +398,8 @@ export class Orchestrator {
             this.memoryStream.write(stripAnsi(chunk));
           } catch {}
         }
+        // Opportunistically compact memory file to the last N lines
+        await this.maybeCompactMemoryFile();
 
         // Auto-accept workspace trust prompt if detected
         if (
@@ -767,6 +776,31 @@ export class Orchestrator {
       await writeFile(path, content, 'utf8');
     } catch {
       // ignore write failures
+    }
+  }
+
+  private async maybeCompactMemoryFile(): Promise<void> {
+    try {
+      if (!this.options.memoryLogPath || !this.memoryStream) return;
+      const limit = Math.max(50, Math.min(5000, this.options.memoryLines ?? 500));
+      // Compact only when significantly over the limit and not too frequently
+      if (this.rollingLines.length <= limit + 200) return;
+      const now = Date.now();
+      if (now - this.lastMemoryCompactAt < 5000) return;
+      this.lastMemoryCompactAt = now;
+      const cwd = this.options.cwd ?? process.cwd();
+      const path = this.options.memoryLogPath.startsWith('/')
+        ? this.options.memoryLogPath
+        : `${cwd}/${this.options.memoryLogPath}`;
+      const content = this.rollingLines.slice(-limit).join('\n');
+      // Recreate stream around overwrite to ensure consistency
+      try {
+        this.memoryStream.end();
+      } catch {}
+      await writeFile(path, content, 'utf8');
+      this.memoryStream = createWriteStream(path, { flags: 'a' });
+    } catch {
+      // ignore compaction errors
     }
   }
 
