@@ -1,12 +1,11 @@
 import { constants as fsConstants } from 'node:fs';
 import { type WriteStream, createWriteStream } from 'node:fs';
-import { access } from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
-import { writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - ESM typed but fine to import in NodeNext
 // import logUpdate from 'log-update';
 import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - CJS module without types
 import createAnsiDiff from 'ansi-diff-stream';
@@ -320,6 +319,7 @@ export class Orchestrator {
           ? this.options.memoryLogPath
           : `${cwd}/${this.options.memoryLogPath}`;
         try {
+          await mkdir(dirname(path), { recursive: true });
           this.memoryStream = createWriteStream(path, { flags: 'a' });
         } catch {}
       }
@@ -791,6 +791,7 @@ export class Orchestrator {
         ? this.options.memoryLogPath
         : `${cwd}/${this.options.memoryLogPath}`;
       const content = this.rollingLines.join('\n');
+      await mkdir(dirname(path), { recursive: true });
       await writeFile(path, content, 'utf8');
     } catch {
       // ignore write failures
