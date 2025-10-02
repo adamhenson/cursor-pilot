@@ -33,9 +33,6 @@ const envIdleStrict = Boolean(
     process.env.CURSORPILOT_IDLE_STRICT !== '0' &&
     process.env.CURSORPILOT_IDLE_STRICT.toLowerCase() !== 'false'
 );
-const envRunningTimeoutMs = process.env.CURSORPILOT_RUNNING_TIMEOUT_MS
-  ? Number(process.env.CURSORPILOT_RUNNING_TIMEOUT_MS)
-  : undefined;
 const envMemoryLog = process.env.CURSORPILOT_MEMORY_LOG;
 const envMemoryLines = process.env.CURSORPILOT_MEMORY_LINES
   ? Number(process.env.CURSORPILOT_MEMORY_LINES)
@@ -112,12 +109,6 @@ program
     (v) => Number(v),
     envCursorCmdTimeoutMs
   )
-  .option(
-    '--running-timeout-ms <num>',
-    'Timeout for continuous running state without questions/idle (ms)',
-    (v) => Number(v),
-    envRunningTimeoutMs
-  )
   .option('--memory-log <path>', 'Path to persist rolling output memory', envMemoryLog)
   .option(
     '--memory-lines <num>',
@@ -150,7 +141,6 @@ program
       guidanceOnly?: boolean;
       guidanceCooldownMs?: number;
       idleStrict?: boolean;
-      runningTimeoutMs?: number;
       memoryLog?: string;
       memoryLines?: number;
       // simplified args only
@@ -175,7 +165,6 @@ program
         guidanceOnly: opts.guidanceOnly,
         guidanceCooldownMs: opts.guidanceCooldownMs,
         idleStrict: opts.idleStrict,
-        runningTimeoutMs: opts.runningTimeoutMs,
         memoryLogPath: opts.memoryLog,
         memoryLines: opts.memoryLines,
         // raw mirroring defaults only

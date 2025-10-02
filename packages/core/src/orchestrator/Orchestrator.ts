@@ -76,8 +76,6 @@ export type OrchestratorOptions = {
   guidanceCooldownMs?: number;
   /** Use strict idle detection (exact normalized repeat) */
   idleStrict?: boolean;
-  /** Timeout for continuous running state with no prompts/idle (ms) */
-  runningTimeoutMs?: number;
   /** Optional path to persist rolling memory log */
   memoryLogPath?: string;
   /** Max lines to persist and preload */
@@ -130,8 +128,8 @@ export class Orchestrator {
   private lastFrameLines: string[] = [];
   private diffStream: any;
   private compactTerm: any;
-  private runningSince = 0;
-  private runningTimeoutNotified = false;
+  private runningSince = 0; // retained but unused; legacy
+  private runningTimeoutNotified = false; // retained but unused; legacy
   private rollingLines: string[] = [];
   private memoryStream: WriteStream | undefined;
 
@@ -509,33 +507,7 @@ export class Orchestrator {
           return;
         }
 
-        // Running watchdog: exit if stuck in running for too long
-        if (eventType === 'running') {
-          const nowTs = Date.now();
-          if (this.runningSince === 0) this.runningSince = nowTs;
-          const limit = this.options.runningTimeoutMs ?? 0;
-          if (limit > 0 && nowTs - this.runningSince > limit) {
-            if (!this.runningTimeoutNotified) {
-              const seconds = Math.round(limit / 1000);
-              const msg = `[CursorPilot] Session may be stuck (no prompts or idle for ${seconds}s). If a GUI dialog is open (e.g., Playwright trace viewer), please close it or proceed. Otherwise, continue with the plan.`;
-              this.transcript?.note(
-                `Running-state timeout hit (${limit}ms); notifying Cursor instead of exiting.`
-              );
-              // Ensure input focus by pressing Enter and Ctrl+O to expand, then send message with trailing Enter
-              await this.process?.write('');
-              await new Promise((r) => setTimeout(r, 120));
-              await this.process?.sendControlChar(0x0f);
-              await new Promise((r) => setTimeout(r, 120));
-              await this.process?.write(msg);
-              this.runningTimeoutNotified = true;
-            }
-            // Reset the timer to avoid flooding; continue monitoring
-            this.runningSince = nowTs;
-          }
-        } else {
-          this.runningSince = 0;
-          this.runningTimeoutNotified = false;
-        }
+        // Running watchdog removed
 
         if (eventType === 'idle') {
           this.consecutiveIdle += 1;
