@@ -381,7 +381,11 @@ export class Orchestrator {
         }
 
         const isApprovalPrompt =
-          /Run this command\?/i.test(chunk) || /Not in allowlist:/i.test(chunk);
+          /Run this command\?/i.test(chunk) ||
+          /Not in allowlist:/i.test(chunk) ||
+          /Write to this file\?/i.test(chunk) ||
+          /(Proceed\s*\(y\)\s*\(enter\))/i.test(chunk) ||
+          /Add\s+Write\(/i.test(chunk);
         // Handle run confirmation prompts
         if (isApprovalPrompt) {
           const approvalCmds = extractApprovalCommandsFromChunk(chunk);
@@ -390,7 +394,9 @@ export class Orchestrator {
           }
           if (this.autoApprovePrompts) {
             // Wait until options line is visible to press Enter
-            const hasOptions = /(Run\s*\(y\)\s*\(enter\))/i.test(chunk);
+            const hasOptions = /(Run\s*\(y\)\s*\(enter\))|(Proceed\s*\(y\)\s*\(enter\))/i.test(
+              chunk
+            );
             if (this.approvalPhase === 'none' && !hasOptions) {
               this.approvalPhase = 'sentEnter';
               // Small delay to allow options to render, then press Enter

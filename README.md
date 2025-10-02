@@ -57,8 +57,8 @@ See `ENV_VARS.md` for supported variables and an example `.env`.
 ```bash
 npm run dev -- run \
   --cwd "../zet" \
-  --prompt "../zet/cursor-pilot/2025-10-01-governing-prompt-fix-tests.md" \
-  --plan "../zet/cursor-pilot/plan-tests.yml" \
+  --prompt "../zet/cursor-pilot/governing-prompt.md" \
+  --plan "../zet/cursor-pilot/plan.yml" \
   --detectors "/Users/adam/Projects/cursor-pilot/detectors.json"
 ```
 
