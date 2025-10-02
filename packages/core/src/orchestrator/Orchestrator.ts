@@ -1,4 +1,5 @@
 import { constants as fsConstants } from 'node:fs';
+import { type WriteStream, createWriteStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import { writeFile } from 'node:fs/promises';
@@ -133,6 +134,7 @@ export class Orchestrator {
   private runningSince = 0;
   private runningTimeoutNotified = false;
   private rollingLines: string[] = [];
+  private memoryStream: WriteStream | undefined;
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -312,6 +314,15 @@ export class Orchestrator {
       const system = baseSystemPrompt();
       // Preload rolling memory from file into initial rollingLines (stripped to last N lines)
       await this.preloadRollingMemory({ cwd, maxLines: this.options.memoryLines ?? 500 });
+      // Open streaming memory log if configured
+      if (this.options.memoryLogPath) {
+        const path = this.options.memoryLogPath.startsWith('/')
+          ? this.options.memoryLogPath
+          : `${cwd}/${this.options.memoryLogPath}`;
+        try {
+          this.memoryStream = createWriteStream(path, { flags: 'a' });
+        } catch {}
+      }
       const guidanceFromGoverning = (text: string | undefined): string => {
         const trimmed = (text || '').trim();
         if (trimmed.length > 0) {
@@ -375,8 +386,13 @@ export class Orchestrator {
         }
         // In TUI mode we mirror raw PTY output only (no overlay rendering)
 
-        // Rolling memory capture (store raw, strip ANSI later on write)
+        // Rolling memory capture (store raw, strip ANSI on write)
         this.captureRolling(chunk);
+        if (this.memoryStream) {
+          try {
+            this.memoryStream.write(stripAnsi(chunk));
+          } catch {}
+        }
 
         // Auto-accept workspace trust prompt if detected
         if (
@@ -505,9 +521,11 @@ export class Orchestrator {
               this.transcript?.note(
                 `Running-state timeout hit (${limit}ms); notifying Cursor instead of exiting.`
               );
-              // Ensure input focus by pressing Enter first
+              // Ensure input focus by pressing Enter and Ctrl+O to expand, then send message with trailing Enter
               await this.process?.write('');
-              await new Promise((r) => setTimeout(r, 150));
+              await new Promise((r) => setTimeout(r, 120));
+              await this.process?.sendControlChar(0x0f);
+              await new Promise((r) => setTimeout(r, 120));
               await this.process?.write(msg);
               this.runningTimeoutNotified = true;
             }
@@ -746,6 +764,9 @@ export class Orchestrator {
     if (this.tui) this.tui.destroy();
     this.transcript?.close();
     await this.flushRollingMemory();
+    try {
+      this.memoryStream?.end();
+    } catch {}
     this.process = undefined;
   }
 
