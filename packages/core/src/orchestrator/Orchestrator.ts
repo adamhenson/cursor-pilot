@@ -1,6 +1,7 @@
 import { constants as fsConstants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - ESM typed but fine to import in NodeNext
 // import logUpdate from 'log-update';
@@ -77,6 +78,10 @@ export type OrchestratorOptions = {
   idleStrict?: boolean;
   /** Timeout for continuous running state with no prompts/idle (ms) */
   runningTimeoutMs?: number;
+  /** Optional path to persist rolling memory log */
+  memoryLogPath?: string;
+  /** Max lines to persist and preload */
+  memoryLines?: number;
 };
 
 async function resolveGoverningPrompt(
@@ -127,6 +132,7 @@ export class Orchestrator {
   private compactTerm: any;
   private runningSince = 0;
   private runningTimeoutNotified = false;
+  private rollingLines: string[] = [];
 
   /** Construct a new orchestrator with the provided options. */
   public constructor(options: OrchestratorOptions = {}) {
@@ -304,6 +310,8 @@ export class Orchestrator {
       }
 
       const system = baseSystemPrompt();
+      // Preload rolling memory from file into initial rollingLines (stripped to last N lines)
+      await this.preloadRollingMemory({ cwd, maxLines: this.options.memoryLines ?? 500 });
       const guidanceFromGoverning = (text: string | undefined): string => {
         const trimmed = (text || '').trim();
         if (trimmed.length > 0) {
@@ -366,6 +374,9 @@ export class Orchestrator {
           }
         }
         // In TUI mode we mirror raw PTY output only (no overlay rendering)
+
+        // Rolling memory capture (store raw, strip ANSI later on write)
+        this.captureRolling(chunk);
 
         // Auto-accept workspace trust prompt if detected
         if (
@@ -734,7 +745,56 @@ export class Orchestrator {
     await this.process?.dispose();
     if (this.tui) this.tui.destroy();
     this.transcript?.close();
+    await this.flushRollingMemory();
     this.process = undefined;
+  }
+
+  // Rolling memory: capture raw chunk (ANSI stripped later on write)
+  private captureRolling(chunk: string): void {
+    const lines = stripAnsi(chunk).split('\n');
+    for (const line of lines) {
+      if (line.length === 0) continue;
+      this.rollingLines.push(line);
+    }
+    const limit = Math.max(50, Math.min(5000, this.options.memoryLines ?? 500));
+    if (this.rollingLines.length > limit) {
+      this.rollingLines = this.rollingLines.slice(-limit);
+    }
+  }
+
+  private async flushRollingMemory(): Promise<void> {
+    try {
+      if (!this.options.memoryLogPath) return;
+      const cwd = this.options.cwd ?? process.cwd();
+      const path = this.options.memoryLogPath.startsWith('/')
+        ? this.options.memoryLogPath
+        : `${cwd}/${this.options.memoryLogPath}`;
+      const content = this.rollingLines.join('\n');
+      await writeFile(path, content, 'utf8');
+    } catch {
+      // ignore write failures
+    }
+  }
+
+  private async preloadRollingMemory({
+    cwd,
+    maxLines,
+  }: {
+    cwd: string;
+    maxLines: number;
+  }): Promise<void> {
+    try {
+      if (!this.options.memoryLogPath) return;
+      const path = this.options.memoryLogPath.startsWith('/')
+        ? this.options.memoryLogPath
+        : `${cwd}/${this.options.memoryLogPath}`;
+      await access(path, fsConstants.F_OK);
+      const raw = await readFile(path, 'utf8');
+      const lines = raw.split('\n').filter(Boolean);
+      this.rollingLines = lines.slice(-maxLines);
+    } catch {
+      // ignore missing or unreadable memory log
+    }
   }
 }
 
@@ -865,6 +925,8 @@ function extractApprovalCommandsFromChunk(chunk: string): string | undefined {
   if (cmd) return cmd[1].trim();
   return undefined;
 }
+
+// (Removed prototype helpers; implemented as class methods above.)
 function renderAtomicFrame({
   next,
   prevLines,

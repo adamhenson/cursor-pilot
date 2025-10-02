@@ -36,6 +36,10 @@ const envIdleStrict = Boolean(
 const envRunningTimeoutMs = process.env.CURSORPILOT_RUNNING_TIMEOUT_MS
   ? Number(process.env.CURSORPILOT_RUNNING_TIMEOUT_MS)
   : undefined;
+const envMemoryLog = process.env.CURSORPILOT_MEMORY_LOG;
+const envMemoryLines = process.env.CURSORPILOT_MEMORY_LINES
+  ? Number(process.env.CURSORPILOT_MEMORY_LINES)
+  : undefined;
 // verbose events removed; always quiet
 const envAutoApprove = Boolean(
   process.env.CURSORPILOT_AUTO_APPROVE &&
@@ -114,6 +118,13 @@ program
     (v) => Number(v),
     envRunningTimeoutMs
   )
+  .option('--memory-log <path>', 'Path to persist rolling output memory', envMemoryLog)
+  .option(
+    '--memory-lines <num>',
+    'Max number of lines to persist and preload into context',
+    (v) => Number(v),
+    envMemoryLines
+  )
   // no verbose event printing
   .allowExcessArguments(false)
   .action(
@@ -140,6 +151,8 @@ program
       guidanceCooldownMs?: number;
       idleStrict?: boolean;
       runningTimeoutMs?: number;
+      memoryLog?: string;
+      memoryLines?: number;
       // simplified args only
     }) => {
       const effective = {
@@ -163,6 +176,8 @@ program
         guidanceCooldownMs: opts.guidanceCooldownMs,
         idleStrict: opts.idleStrict,
         runningTimeoutMs: opts.runningTimeoutMs,
+        memoryLogPath: opts.memoryLog,
+        memoryLines: opts.memoryLines,
         // raw mirroring defaults only
       } as const;
 
