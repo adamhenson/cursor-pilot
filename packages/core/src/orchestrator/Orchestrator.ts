@@ -265,12 +265,14 @@ export class Orchestrator {
           await this.process?.write('');
           this.transcript?.seedPrompt(governingText);
           if (this.seedNudgeTimer) clearTimeout(this.seedNudgeTimer);
-          this.seedNudgeTimer = setTimeout(async () => {
-            await this.process?.write('');
-            await new Promise((r) => setTimeout(r, 200));
-            await this.process?.write('Auto');
-            this.transcript?.note('Sent idle nudge');
-          }, 3000);
+          if (this.options.autoAnswerIdle) {
+            this.seedNudgeTimer = setTimeout(async () => {
+              await this.process?.write('');
+              await new Promise((r) => setTimeout(r, 200));
+              await this.process?.write('Auto');
+              this.transcript?.note('Sent idle nudge');
+            }, 3000);
+          }
         }
       }
       if (this.compactConsole && !this.useTui) {
@@ -486,6 +488,9 @@ export class Orchestrator {
               this.transcript?.note(
                 `Running-state timeout hit (${limit}ms); notifying Cursor instead of exiting.`
               );
+              // Ensure input focus by pressing Enter first
+              await this.process?.write('');
+              await new Promise((r) => setTimeout(r, 150));
               await this.process?.write(msg);
               this.runningTimeoutNotified = true;
             }
